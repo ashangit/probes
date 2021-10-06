@@ -1,0 +1,15 @@
+[package]
+name = "probes"
+version = "0.1.0"
+authors = ["Nicolas Fraison <nfraison@yahoo.fr>"]
+edition = "2018"
+
+[[bin]]
+name = "espoke"
+path = "src/bin/espoke.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper = { version = "0.14", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
