@@ -1,24 +1,9 @@
-use hyper::{Client, Body, Response};
-
-use hyper::body::HttpBody as _;
-use tokio::io::{stdout, AsyncWriteExt as _};
-use hyper::header::HeaderValue;
+use hyper::{Body, Client};
 use hyper::client::HttpConnector;
-use std::fmt::{Display, Formatter};
 
-async fn get_services(client: &Client<HttpConnector, Body>, index: Option<&HeaderValue>) -> Result<Response<Body>, Box<dyn std::error::Error + Send + Sync>> {
-    let prev_index: i64 = match index {
-        Some(x) => {
-            let tmp_index = x.to_str().unwrap().parse()?;
-            if tmp_index < 0 {
-                0
-            } else {
-                tmp_index
-            }
-        }
-        None => 0,
-    };
+use probes::token_bucket::TokenBucket;
 
+async fn get_services(client: &Client<HttpConnector, Body>, prev_index: i64) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let fqdn = format!("http://kube-worker0005.kubes98.par.preprod.crto.in:8500/v1/catalog/services?index={}", prev_index);
 
     let uri = fqdn.as_str().parse()?;
@@ -37,32 +22,37 @@ async fn get_services(client: &Client<HttpConnector, Body>, index: Option<&Heade
 
     let resp_index: i64 = resp.headers().get("x-consul-index").unwrap().to_str().unwrap().parse()?;
 
-    // TODO: change the return type so it return index and resp
+    // TODO check with consul doc which condition should lead to reset
     if resp_index < prev_index {
-        println!("ISSUE");
+        return Ok(0);
     }
 
-    // TODO: rate limit request: https://docs.rs/tokenbucket/0.1.3/tokenbucket/ + https://docs.rs/tokio/1.0.1/tokio/time/fn.sleep.html
+    // TODO also return body
 
-    Ok(resp)
+    Ok(resp_index)
 }
 
 async fn watch_services() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = Client::new();
-    let mut index = None;
+    let mut index = 0;
 
-    //async move {
-        while true {
-            let resp = get_services(&client, index).await.unwrap();
-            index = resp.headers().get("x-consul-index");
-            println!("{}", index.unwrap().to_str().unwrap())
+    let mut token_bucket = TokenBucket::new(60, 1);
 
-            // And now...
-            //while let Some(chunk) = resp.body_mut().data().await {
-            //    stdout().write_all(&chunk?).await?;
-            //}
-        };
-   // };
+    loop {
+        token_bucket.wait_for(60).await?;
+
+        index = get_services(&client, index).await?;
+        println!("{}", index);
+
+        if index < 0 {
+            break;
+        }
+
+        // And now...
+        //while let Some(chunk) = resp.body_mut().data().await {
+        //    stdout().write_all(&chunk?).await?;
+        //}
+    };
     Ok(())
 }
 
