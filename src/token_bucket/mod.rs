@@ -1,5 +1,6 @@
 use tokio::time::Instant;
 use tokio::time::{sleep, Duration};
+use log::{debug, error};
 
 // Represent a token bucket rate limiter
 pub struct TokenBucket {
@@ -28,6 +29,7 @@ impl TokenBucket {
     /// let mut token_bucket = TokenBucket::new(60, 1);
     /// ```
     pub fn new(capacity: u64, quantum: u64) -> TokenBucket {
+        debug!("Create token bucket with capacity {}, quantum {}", capacity, quantum);
         TokenBucket {
             capacity,
             quantum,
@@ -48,6 +50,7 @@ impl TokenBucket {
     fn compute_wait_duration(&mut self, token: u64) -> Duration {
         let token_needed: u64 = token - self.available;
         let time_to_wait: f64 = token_needed as f64 / self.quantum as f64;
+        debug!("Wait for {}s to get enough token", time_to_wait);
         Duration::from_secs_f64(time_to_wait)
     }
 
@@ -60,6 +63,7 @@ impl TokenBucket {
     /// * `token` - Number of token requested
     pub async fn wait_for(&mut self, token: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.capacity < token {
+            error!("Requested token is bigger than max capacity {} < {}", self.capacity, token);
             return Err(format!("Number of requested token ({}) is greater than the capacity ({}) \
             of the token bucket", token, self.capacity).into());
         }
@@ -72,6 +76,7 @@ impl TokenBucket {
         self.available = self.available_token_since(self.last.elapsed().as_secs());
 
         if self.available >= token {
+            debug!("There are already enough available token {} >= {}", self.available, token);
             self.update_counter(token);
             return Ok(());
         }
