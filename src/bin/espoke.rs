@@ -1,8 +1,8 @@
 use probes::consul::ConsulClient;
 use console_subscriber;
-use argparse::{ArgumentParser, Store, StoreOption};
+use argparse::{ArgumentParser, Store};
 use log::error;
-use std::io::stderr;
+use probes::probes::Probe;
 
 fn main() -> Result<(), i32> {
     env_logger::init();
@@ -38,8 +38,9 @@ fn main() -> Result<(), i32> {
         },
         Ok(mt) => mt.block_on(
             async {
-                let mut consul_client = ConsulClient::new(consul_hostanme, consul_port, services_tag);
-                consul_client.watch_services().await;
+                let consul_client = ConsulClient::new(consul_hostanme, consul_port);
+                let mut probe = Probe::new(consul_client, services_tag);
+                probe.watch_matching_services().await;
             }),
     }
 
