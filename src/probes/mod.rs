@@ -68,17 +68,12 @@ impl ProbeServices {
             token_bucket.wait_for(60).await?;
 
             // TODO manage error here? failed prog or just display error?
-            let res = self.consul_client.get_matching_services(index, self.tag.clone()).await?;
+            let matching_services = self.consul_client.list_matching_services(index, self.tag.clone()).await?;
 
-            match res {
-                Some(matching_services) => {
-                    index = matching_services.index;
+            index = matching_services.index;
 
-                    self.stop_watch_service(&matching_services.services);
-                    self.add_watch_service(&matching_services.services);
-                }
-                None => index = 0,
-            }
+            self.stop_watch_service(&matching_services.services);
+            self.add_watch_service(&matching_services.services);
         };
     }
 }
@@ -112,16 +107,11 @@ impl ProbeService {
             token_bucket.wait_for(60).await?;
 
             // TODO manage error here? failed prog or just display error?
-            let res = self.consul_client.list_nodes_for_service(index, self.service_name.clone()).await?;
+            let service_nodes = self.consul_client.list_nodes_for_service(index, self.service_name.clone()).await?;
 
             // TODO init one async task per service found if not in vec with an smp channel to send msg
             //   send stop to channel if not in service list but in vec (del from vec)
-            match res {
-                Some(service_nodes) => {
-                    index = service_nodes.index;
-                }
-                None => index = 0,
-            }
+            index = service_nodes.index;
         };
         // TODO watch for list of nodes and get external fqdn?
     }
