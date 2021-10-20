@@ -1,6 +1,6 @@
-use tokio::time::Instant;
-use tokio::time::{sleep, Duration};
 use log::{debug, error};
+use tokio::time::{Duration, sleep};
+use tokio::time::Instant;
 
 // Represent a token bucket rate limiter
 pub struct TokenBucket {
@@ -92,8 +92,9 @@ impl TokenBucket {
 
 #[cfg(test)]
 mod tests {
-    use crate::token_bucket::TokenBucket;
     use std::time::Duration;
+
+    use crate::token_bucket::TokenBucket;
 
     #[test]
     fn available_token_since() {

@@ -1,23 +1,22 @@
-use log::debug;
-
-use crate::token_bucket::TokenBucket;
 use std::collections::HashMap;
-use crate::consul::ConsulClient;
 
-// Represent a consul client
-pub struct Probe {
-    // The fqdn of the consul agent to query
+use log::{debug, info, warn};
+use tokio::sync::oneshot;
+use tokio::sync::oneshot::{Receiver, Sender};
+
+use crate::consul::ConsulClient;
+use crate::token_bucket::TokenBucket;
+
+pub struct ProbeServices {
     consul_client: ConsulClient,
-    // Services tag to search on consul
     tag: String,
-    //
-    watch_services: HashMap<String, String>,
+    watch_services: HashMap<String, Sender<u8>>,
 }
 
-impl Probe {
-    pub fn new(consul_client: ConsulClient, tag: String) -> Probe {
+impl ProbeServices {
+    pub fn new(consul_client: ConsulClient, tag: String) -> ProbeServices {
         debug!("Create a probe for services with tag {}", tag);
-        Probe {
+        ProbeServices {
             consul_client: consul_client,
             tag: tag,
             watch_services: HashMap::new(),
@@ -36,7 +35,12 @@ impl Probe {
         for service_name in services_to_remove.iter() {
             // TODO call queue to stop async of service
             debug!("Stop watching service {}", service_name);
-            self.watch_services.remove(service_name);
+            match self.watch_services.remove(service_name) {
+                Some(resp_tx) => {
+                    resp_tx.send(1);
+                }
+                None => warn!("Service {} is not a watched services", service_name),
+            }
         }
     }
 
@@ -44,6 +48,14 @@ impl Probe {
         for service_name in matching_services.iter() {
             if !self.watch_services.contains_key(service_name) {
                 debug!("Start to watch service {}", service_name);
+                let (resp_tx, resp_rx) = oneshot::channel();
+                self.watch_services.insert(service_name.clone(), resp_tx);
+                let cc = self.consul_client.clone();
+                let s = service_name.clone();
+                tokio::spawn(async move {
+                    let mut probe_service = ProbeService::new(s, cc, resp_rx);
+                    probe_service.watch_service().await;
+                });
             }
         }
     }
@@ -58,8 +70,6 @@ impl Probe {
             // TODO manage error here? failed prog or just display error?
             let res = self.consul_client.get_matching_services(index, self.tag.clone()).await?;
 
-            // TODO init one async task per service found if not in vec with an smp channel to send msg
-            //   send stop to channel if not in service list but in vec (del from vec)
             match res {
                 Some(matching_services) => {
                     index = matching_services.index;
@@ -70,5 +80,49 @@ impl Probe {
                 None => index = 0,
             }
         };
+    }
+}
+
+
+pub struct ProbeService {
+    service_name: String,
+    consul_client: ConsulClient,
+    resp_rx: Receiver<u8>,
+    watch_nodes: HashMap<String, Sender<u8>>,
+}
+
+impl ProbeService {
+    pub fn new(service_name: String, consul_client: ConsulClient, resp_rx: Receiver<u8>) -> ProbeService {
+        debug!("Create a probe for service {}", service_name);
+        ProbeService {
+            service_name: service_name,
+            consul_client: consul_client,
+            resp_rx: resp_rx,
+            watch_nodes: HashMap::new(),
+        }
+    }
+
+    // TODO create memcached client with set and get (https://www.slideshare.net/tmaesaka/memcached-binary-protocol-in-a-nutshell-presentation)
+    pub async fn watch_service(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Start watching service {}", self.service_name);
+        let mut token_bucket = TokenBucket::new(60, 1);
+        let mut index = 0;
+
+        loop {
+            token_bucket.wait_for(60).await?;
+
+            // TODO manage error here? failed prog or just display error?
+            let res = self.consul_client.list_nodes_for_service(index, self.service_name.clone()).await?;
+
+            // TODO init one async task per service found if not in vec with an smp channel to send msg
+            //   send stop to channel if not in service list but in vec (del from vec)
+            match res {
+                Some(service_nodes) => {
+                    index = service_nodes.index;
+                }
+                None => index = 0,
+            }
+        };
+        // TODO watch for list of nodes and get external fqdn?
     }
 }

@@ -5,8 +5,8 @@ authors = ["Nicolas Fraison <nfraison@yahoo.fr>"]
 edition = "2018"
 
 [[bin]]
-name = "espoke"
-path = "src/bin/espoke.rs"
+name = "mempoke"
+path = "src/bin/mempoke.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

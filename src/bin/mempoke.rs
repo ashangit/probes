@@ -1,8 +1,9 @@
-use probes::consul::ConsulClient;
-use console_subscriber;
 use argparse::{ArgumentParser, Store};
+use console_subscriber;
 use log::error;
-use probes::probes::Probe;
+
+use probes::consul::ConsulClient;
+use probes::probes::ProbeServices;
 
 fn main() -> Result<(), i32> {
     env_logger::init();
@@ -34,12 +35,12 @@ fn main() -> Result<(), i32> {
     match mt_rt {
         Err(issue) => {
             error!("Issue running the multi thread event loop due to: {}", issue);
-            return Err(0)
-        },
+            return Err(0);
+        }
         Ok(mt) => mt.block_on(
             async {
                 let consul_client = ConsulClient::new(consul_hostanme, consul_port);
-                let mut probe = Probe::new(consul_client, services_tag);
+                let mut probe = ProbeServices::new(consul_client, services_tag);
                 probe.watch_matching_services().await;
             }),
     }
