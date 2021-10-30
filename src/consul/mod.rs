@@ -16,6 +16,7 @@ pub struct WatchedServices {
     pub services: Vec<String>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct ServiceNode {
     pub ip: String,
     pub port: i64,
@@ -103,7 +104,7 @@ impl ConsulClient {
         let services = match body_json.as_array() {
             Some(x) => x,
             None => {
-                warn!("Empty list of services on the consul catalog");
+                warn!("Returned body is not an array of nodes: {}", body_json.to_string());
                 &empty
             }
         };
@@ -192,22 +193,22 @@ impl ConsulClient {
 mod tests {
     use serde_json::Value;
 
-    use crate::consul::ConsulClient;
+    use crate::consul::{ConsulClient, ServiceNode};
 
     #[test]
     fn get_string_value() {
-        assert_eq!(ConsulClient::get_string_value(&Value::String("test".to_string())), "test".to_string());
-        assert_eq!(ConsulClient::get_string_value(&Value::Null), "".to_string());
+        assert_eq!("test".to_string(), ConsulClient::get_string_value(&Value::String("test".to_string())));
+        assert_eq!("".to_string(), ConsulClient::get_string_value(&Value::Null));
     }
 
     #[test]
     fn is_matching_service() {
-        assert_eq!(ConsulClient::is_matching_service(&"elasticsearch".to_string(),
-                                                     Some(&vec![Value::String("elasticsearch".to_string()), Value::String("http".to_string())])), true);
-        assert_eq!(ConsulClient::is_matching_service(&"elasticsearch".to_string(),
-                                                     Some(&vec![Value::String("memcached".to_string()), Value::String("tcp".to_string())])), false);
-        assert_eq!(ConsulClient::is_matching_service(&"elasticsearch".to_string(),
-                                                     None), false);
+        assert_eq!(true, ConsulClient::is_matching_service(&"elasticsearch".to_string(),
+                                                           Some(&vec![Value::String("elasticsearch".to_string()), Value::String("http".to_string())])));
+        assert_eq!(false, ConsulClient::is_matching_service(&"elasticsearch".to_string(),
+                                                            Some(&vec![Value::String("memcached".to_string()), Value::String("tcp".to_string())])));
+        assert_eq!(false, ConsulClient::is_matching_service(&"elasticsearch".to_string(),
+                                                            None));
     }
 
     #[test]
@@ -216,11 +217,39 @@ mod tests {
         \"default\",\"http\",\"marathon\",\"marathon-start-20211014T120126Z\",\"marathon-user-svc-youfollow\"],\
         \"elasticsearch-secauditlogs-https\":[\"https\",\"elasticsearch\",\"master\",\"data\",\"cluster_name-secauditlogs\",\"version-7.7.1\",\"maintenance-elasticsearch\",\"nosql\"],\
         \"elasticsearch-shared\":[\"nosql\",\"data\",\"cluster_name-shared-s01\",\"version-6.8.10\",\"\",\"https\",\"elasticsearch\",\"master\",\"maintenance-elasticsearch\"]}").unwrap();
-        assert_eq!(ConsulClient::extract_matching_services(&"maintenance-elasticsearch".to_string(), body_json), vec!["elasticsearch-secauditlogs-https", "elasticsearch-shared"]);
+        assert_eq!(vec!["elasticsearch-secauditlogs-https", "elasticsearch-shared"], ConsulClient::extract_matching_services(&"maintenance-elasticsearch".to_string(), body_json));
 
         let empty: Vec<String> = Vec::new();
         // Empty json for list of services
-        assert_eq!(ConsulClient::extract_matching_services(&"maintenance-elasticsearch".to_string(),
-                                                           serde_json::from_str("{}").unwrap()), empty);
+        assert_eq!(empty, ConsulClient::extract_matching_services(&"maintenance-elasticsearch".to_string(),
+                                                                  serde_json::from_str("{}").unwrap()));
+    }
+
+    #[test]
+    fn check_index() {
+        assert_eq!(5, ConsulClient::check_index(1, 5));
+        assert_eq!(0, ConsulClient::check_index(5, 1));
+        assert_eq!(0, ConsulClient::check_index(1, -5));
+    }
+
+
+    #[test]
+    fn get_service_address_port() {
+        let node_value = serde_json::from_str("{\"ServiceAddress\":\"127.0.0.1\",\"ServicePort\":1045}").unwrap();
+        assert_eq!(ServiceNode { ip: "127.0.0.1".to_string(), port: 1045 }, ConsulClient::get_service_address_port(&node_value));
+    }
+
+    #[test]
+    fn extract_nodes() {
+        let nodes_value = serde_json::from_str("[{\"ServiceAddress\":\"127.0.0.1\",\"ServicePort\":1045}, {\"ServiceAddress\":\"127.0.0.2\",\"ServicePort\":1045}]").unwrap();
+        let nodes = vec![ServiceNode { ip: "127.0.0.1".to_string(), port: 1045 }, ServiceNode { ip: "127.0.0.2".to_string(), port: 1045 }];
+        assert_eq!(nodes, ConsulClient::extract_nodes(nodes_value));
+
+        let nodes_value = serde_json::from_str("[]").unwrap();
+        let empty: Vec<ServiceNode> = Vec::new();
+        assert_eq!(empty, ConsulClient::extract_nodes(nodes_value));
+
+        let nodes_value = serde_json::from_str("{}").unwrap();
+        assert_eq!(empty, ConsulClient::extract_nodes(nodes_value));
     }
 }
