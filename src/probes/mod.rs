@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::{Receiver, Sender};
 
@@ -17,10 +17,9 @@ impl ProbeServices {
     pub fn new(consul_client: ConsulClient, tag: String) -> ProbeServices {
         debug!("Create a probe for services with tag {}", tag);
         ProbeServices {
-            consul_client: consul_client,
-            tag: tag,
+            consul_client,
+            tag,
             watch_services: HashMap::new(),
-
         }
     }
 
@@ -60,7 +59,9 @@ impl ProbeServices {
         }
     }
 
-    pub async fn watch_matching_services(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn watch_matching_services(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut token_bucket = TokenBucket::new(60, 1);
         let mut index = 0;
 
@@ -68,16 +69,24 @@ impl ProbeServices {
             token_bucket.wait_for(60).await?;
 
             // TODO manage error here? failed prog or just display error?
-            let matching_services = self.consul_client.list_matching_services(index, self.tag.clone()).await?;
+            match self
+                .consul_client
+                .list_matching_services(index, self.tag.clone())
+                .await
+            {
+                Ok(matching_services) => {
+                    index = matching_services.index;
 
-            index = matching_services.index;
-
-            self.stop_watch_service(&matching_services.services);
-            self.add_watch_service(&matching_services.services);
-        };
+                    self.stop_watch_service(&matching_services.services);
+                    self.add_watch_service(&matching_services.services);
+                }
+                Err(err) => {
+                    error!("Failed to get list of matching services: {}", err);
+                }
+            };
+        }
     }
 }
-
 
 pub struct ProbeService {
     service_name: String,
@@ -87,12 +96,16 @@ pub struct ProbeService {
 }
 
 impl ProbeService {
-    pub fn new(service_name: String, consul_client: ConsulClient, resp_rx: Receiver<u8>) -> ProbeService {
+    pub fn new(
+        service_name: String,
+        consul_client: ConsulClient,
+        resp_rx: Receiver<u8>,
+    ) -> ProbeService {
         debug!("Create a probe for service {}", service_name);
         ProbeService {
-            service_name: service_name,
-            consul_client: consul_client,
-            resp_rx: resp_rx,
+            service_name,
+            consul_client,
+            resp_rx,
             watch_nodes: HashMap::new(),
         }
     }
@@ -107,12 +120,22 @@ impl ProbeService {
             token_bucket.wait_for(60).await?;
 
             // TODO manage error here? failed prog or just display error?
-            let service_nodes = self.consul_client.list_nodes_for_service(index, self.service_name.clone()).await?;
+            match self
+                .consul_client
+                .list_nodes_for_service(index, self.service_name.clone())
+                .await
+            {
+                Ok(service_nodes) => {
+                    // TODO init one async task per service found if not in vec with an smp channel to send msg
+                    //   send stop to channel if not in service list but in vec (del from vec)
+                    index = service_nodes.index;
 
-            // TODO init one async task per service found if not in vec with an smp channel to send msg
-            //   send stop to channel if not in service list but in vec (del from vec)
-            index = service_nodes.index;
-        };
-        // TODO watch for list of nodes and get external fqdn?
+                    // TODO watch for list of nodes and get external fqdn?
+                }
+                Err(err) => {
+                    error!("Failed to get list of matching services: {}", err);
+                }
+            };
+        }
     }
 }

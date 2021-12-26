@@ -1,0 +1,21 @@
+{
+  "service": {
+    "id": "memcached",
+    "name": "memcached",
+    "tags": [
+      "memcached"
+    ],
+    "address": "127.0.0.1",
+    "meta": {},
+    "port": 11211,
+    "checks": [
+      {
+        "id": "memcached",
+        "name": "memcached TCP on port 11211",
+        "tcp": "localhost:11211",
+        "interval": "10s",
+        "timeout": "1s"
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 use log::{debug, error};
-use tokio::time::{Duration, sleep};
 use tokio::time::Instant;
+use tokio::time::{sleep, Duration};
 
 // Represent a token bucket rate limiter
 pub struct TokenBucket {
@@ -29,7 +29,10 @@ impl TokenBucket {
     /// let mut token_bucket = TokenBucket::new(60, 1);
     /// ```
     pub fn new(capacity: u64, quantum: u64) -> TokenBucket {
-        debug!("Create token bucket with capacity {}, quantum {}", capacity, quantum);
+        debug!(
+            "Create token bucket with capacity {}, quantum {}",
+            capacity, quantum
+        );
         TokenBucket {
             capacity,
             quantum,
@@ -61,11 +64,21 @@ impl TokenBucket {
     /// # Arguments
     ///
     /// * `token` - Number of token requested
-    pub async fn wait_for(&mut self, token: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn wait_for(
+        &mut self,
+        token: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.capacity < token {
-            error!("Requested token is bigger than max capacity {} < {}", self.capacity, token);
-            return Err(format!("Number of requested token ({}) is greater than the capacity ({}) \
-            of the token bucket", token, self.capacity).into());
+            error!(
+                "Requested token is bigger than max capacity {} < {}",
+                self.capacity, token
+            );
+            return Err(format!(
+                "Number of requested token ({}) is greater than the capacity ({}) \
+            of the token bucket",
+                token, self.capacity
+            )
+            .into());
         }
 
         if token == 0 {
@@ -76,7 +89,10 @@ impl TokenBucket {
         self.available = self.available_token_since(self.last.elapsed().as_secs());
 
         if self.available >= token {
-            debug!("There are already enough available token {} >= {}", self.available, token);
+            debug!(
+                "There are already enough available token {} >= {}",
+                self.available, token
+            );
             self.update_counter(token);
             return Ok(());
         }
@@ -120,6 +136,9 @@ mod tests {
     fn compute_wait_duration() {
         let mut token_bucket = TokenBucket::new(10, 1);
         token_bucket.available = 0;
-        assert_eq!(token_bucket.compute_wait_duration(5), Duration::from_secs_f64(5.00));
+        assert_eq!(
+            token_bucket.compute_wait_duration(5),
+            Duration::from_secs_f64(5.00)
+        );
     }
 }
