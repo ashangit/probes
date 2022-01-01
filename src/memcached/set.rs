@@ -1,7 +1,3 @@
-
-
-
-
 use crate::memcached::header::RequestHeader;
 
 pub struct Set {
@@ -45,7 +41,6 @@ impl Set {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::memcached::set::Set;
 

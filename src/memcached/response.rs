@@ -2,7 +2,6 @@ use std::io::Cursor;
 
 use bytes::{Buf, Bytes};
 
-
 use crate::memcached::header::ResponseHeader;
 
 // pub struct FrameRequest {
@@ -66,7 +65,7 @@ mod tests {
 
     use bytes::Bytes;
 
-    use crate::memcached::respone::{Error, Response};
+    use crate::memcached::response::{Error, Response};
 
     fn check(input: &str) -> Result<usize, Error> {
         let decoded = hex::decode(input).expect("Decoding failed");

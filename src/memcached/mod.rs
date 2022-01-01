@@ -1,15 +1,14 @@
-use std::io::{Cursor};
-
+use std::io::Cursor;
 
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, BufWriter};
 use tokio::net::{TcpStream, ToSocketAddrs};
 
-use crate::memcached::respone::Response;
+use crate::memcached::response::Response;
 use crate::memcached::set::Set;
 
 mod header;
-mod respone;
+mod response;
 mod set;
 
 pub async fn connect<T: ToSocketAddrs>(
@@ -59,7 +58,7 @@ impl Connection {
     fn parse_response(
         &mut self,
     ) -> Result<Option<Response>, Box<dyn std::error::Error + Send + Sync>> {
-        use respone::Error::Incomplete;
+        use response::Error::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Response::check(&mut buf) {

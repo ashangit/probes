@@ -2,9 +2,7 @@ use std::io::Cursor;
 
 use bytes::{Buf, Bytes};
 
-
-
-use crate::memcached::respone::Error;
+use crate::memcached::response::Error;
 
 const HEADER_SIZE: u8 = 24;
 
@@ -118,7 +116,7 @@ mod tests {
     use bytes::Bytes;
 
     use crate::memcached::header::{RequestHeader, ResponseHeader};
-    use crate::memcached::respone::Error;
+    use crate::memcached::response::Error;
     use crate::memcached::set::SET_OPCODE;
 
     #[test]
