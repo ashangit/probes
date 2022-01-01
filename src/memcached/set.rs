@@ -1,36 +1,62 @@
-use std::time::Duration;
 
-use bytes::Bytes;
+
+
+
+use crate::memcached::header::RequestHeader;
 
 pub struct Set {
-    /// the lookup key
-    key: String,
-
-    /// the value to be stored
-    value: Bytes,
-
-    /// When to expire the key
-    expire: Option<Duration>,
+    header: RequestHeader,
+    key: Vec<u8>,
+    value: Vec<u8>,
+    extra_field: Vec<u8>,
 }
 
+pub const SET_OPCODE: u8 = 1;
+pub const EXTRA_LEN: u8 = 8;
+
 impl Set {
-    /// Create a new `Set` command which sets `key` to `value`.
-    ///
-    /// If `expire` is `Some`, the value should expire after the specified
-    /// duration.
-    pub fn new(key: impl ToString, value: Bytes, expire: Option<Duration>) -> Set {
+    pub fn new(key: &str, value: Vec<u8>, expire: u64) -> Set {
+        // extra_field from expire
+        let extra_field: [u8; EXTRA_LEN as usize] = expire.to_be_bytes();
+        let key_vec = key.as_bytes().to_vec();
+        let header = RequestHeader::new(
+            SET_OPCODE,
+            key_vec.len() as u16,
+            EXTRA_LEN,
+            value.len() as u32,
+        );
         Set {
-            key: key.to_string(),
+            header,
+            key: key_vec,
             value,
-            expire,
+            extra_field: extra_field.to_vec(),
         }
     }
 
-    // /// Converts the command into an equivalent `Frame`.
-    // ///
-    // /// This is called by the client when encoding a `Set` command to send to
-    // /// the server.
-    // pub(crate) fn into_frame(self) -> Frame {}
+    pub fn as_bytes(&mut self) -> Vec<u8> {
+        let mut request_bytes: Vec<u8> = Vec::new();
+        request_bytes.extend(self.header.as_bytes());
+        request_bytes.extend(&self.extra_field);
+        request_bytes.extend(&self.key);
+        request_bytes.extend(&self.value);
+        request_bytes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    
+
+    use crate::memcached::set::Set;
+
+    #[test]
+    fn set_as_bytes() {
+        let input =
+            "80010004080000000000001100000000000000000000000000000000000000647465737476616c7565";
+        let decoded = hex::decode(input).expect("Decoding failed");
+        let mut set = Set::new("test", "value".as_bytes().to_vec(), 100);
+        assert_eq!(set.as_bytes(), decoded)
+    }
 }
 
 // REQUEST

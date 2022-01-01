@@ -2,48 +2,61 @@ use std::io::Cursor;
 
 use bytes::{Buf, Bytes};
 
-use crate::memcached::frame::Error;
+
+
+use crate::memcached::respone::Error;
+
+const HEADER_SIZE: u8 = 24;
+
+const REQUEST_PACKET: u8 = 128;
+const DATA_TYPE: u8 = 0;
+const RESERVED: u16 = 0;
+const OPAQUE: u32 = 0;
+const CAS: u64 = 0; // Not using cas inside the probe
 
 // https://www.slideshare.net/tmaesaka/memcached-binary-protocol-in-a-nutshell-presentation
 pub struct RequestHeader {
-    magic: Bytes,
-    opcode: Bytes,
-    key_length: Bytes,
-    extra_length: Bytes,
-    data_type: Bytes,
-    reserved: Bytes,
-    total_body_length: Bytes,
-    opaque: Bytes,
-    cas: Bytes,
+    magic: u8,
+    opcode: u8,
+    key_length: [u8; 2],
+    extra_length: u8,
+    data_type: u8,
+    reserved: [u8; 2],
+    total_body_length: [u8; 4],
+    opaque: [u8; 4],
+    cas: [u8; 8],
 }
 
 impl RequestHeader {
-    pub fn new(
-        magic: Bytes,
-        opcode: Bytes,
-        key_length: Bytes,
-        extra_length: Bytes,
-        data_type: Bytes,
-        reserved: Bytes,
-        total_body_length: Bytes,
-        opaque: Bytes,
-        cas: Bytes,
-    ) -> RequestHeader {
+    pub fn new(opcode: u8, key_length: u16, extra_length: u8, value_length: u32) -> RequestHeader {
+        let total_body_length: u32 = key_length as u32 + extra_length as u32 + value_length;
         RequestHeader {
-            magic,
+            magic: REQUEST_PACKET,
             opcode,
-            key_length,
+            key_length: key_length.to_be_bytes(),
             extra_length,
-            data_type,
-            reserved,
-            total_body_length,
-            opaque,
-            cas,
+            data_type: DATA_TYPE,
+            reserved: RESERVED.to_be_bytes(),
+            total_body_length: total_body_length.to_be_bytes(),
+            opaque: OPAQUE.to_be_bytes(),
+            cas: CAS.to_be_bytes(),
         }
     }
-}
 
-pub static RESPONSE_HEADER_SIZE: u8 = 24;
+    pub fn as_bytes(&mut self) -> Vec<u8> {
+        let mut request_bytes: Vec<u8> = Vec::with_capacity(HEADER_SIZE as usize);
+        request_bytes.push(self.magic);
+        request_bytes.push(self.opcode);
+        request_bytes.extend(self.key_length);
+        request_bytes.push(self.extra_length);
+        request_bytes.push(self.data_type);
+        request_bytes.extend(self.reserved);
+        request_bytes.extend(self.total_body_length);
+        request_bytes.extend(self.opaque);
+        request_bytes.extend(self.cas);
+        request_bytes
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct ResponseHeader {
@@ -77,7 +90,7 @@ impl ResponseHeader {
     /// has enough bytes to process the header response
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, Error> {
         // Check enough bytes to read for a response header
-        if src.remaining() < RESPONSE_HEADER_SIZE as usize {
+        if src.remaining() < HEADER_SIZE as usize {
             return Err(Error::Incomplete);
         }
 
@@ -89,7 +102,7 @@ impl ResponseHeader {
         // Read body length field to compute total len response
         src.advance(7);
         let total_body_size = src.get_u32();
-        let total_len: usize = (RESPONSE_HEADER_SIZE as u32 + total_body_size) as usize;
+        let total_len: usize = (HEADER_SIZE as u32 + total_body_size) as usize;
 
         // Reset position
         src.set_position(0);
@@ -104,8 +117,9 @@ mod tests {
 
     use bytes::Bytes;
 
-    use crate::memcached::frame::Error;
-    use crate::memcached::header::ResponseHeader;
+    use crate::memcached::header::{RequestHeader, ResponseHeader};
+    use crate::memcached::respone::Error;
+    use crate::memcached::set::SET_OPCODE;
 
     #[test]
     fn parse_response_header() {
@@ -156,5 +170,16 @@ mod tests {
         let res = ResponseHeader::check(&mut cursor);
         assert!(res.is_err());
         assert_eq!(res.err().unwrap(), Error::Incomplete);
+    }
+
+    #[test]
+    fn header_as_bytes() {
+        let input = "800100010800000000000011000000000000000000000000";
+        let decoded = hex::decode(input).expect("Decoding failed");
+        let key_length: u16 = 1;
+        let extra_length = 8;
+        let value_length: u32 = 8;
+        let mut header = RequestHeader::new(SET_OPCODE, key_length, extra_length, value_length);
+        assert_eq!(header.as_bytes(), decoded)
     }
 }
