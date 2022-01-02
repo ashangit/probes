@@ -4,7 +4,8 @@ use log::{debug, error, info, warn};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::{Receiver, Sender};
 
-use crate::consul::ConsulClient;
+use crate::consul::{ConsulClient, ServiceNode};
+use crate::memcached;
 use crate::token_bucket::TokenBucket;
 
 pub struct ProbeServices {
@@ -110,6 +111,20 @@ impl ProbeService {
         }
     }
 
+    fn add_node_probe(&mut self, matching_nodes: &Vec<ServiceNode>) {
+        for node_name in matching_nodes.iter() {
+            if !self.watch_nodes.contains_key(node_name.ip.as_str()) {
+                debug!("Start to probe node {}", node_name.ip);
+                let (resp_tx, _resp_rx) = oneshot::channel();
+                self.watch_nodes.insert(node_name.ip.clone(), resp_tx);
+                tokio::spawn(async move {
+                    let mut c_memcache = memcached::connect("localhost:11211").await.unwrap();
+                    c_memcache.probe().await;
+                });
+            }
+        }
+    }
+
     // TODO create memcached client with set and get (https://www.slideshare.net/tmaesaka/memcached-binary-protocol-in-a-nutshell-presentation)
     pub async fn watch_service(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Start watching service {}", self.service_name);
@@ -131,6 +146,8 @@ impl ProbeService {
                     index = service_nodes.index;
 
                     // TODO watch for list of nodes and get external fqdn?
+
+                    self.add_node_probe(&service_nodes.nodes);
                 }
                 Err(err) => {
                     error!("Failed to get list of matching services: {}", err);

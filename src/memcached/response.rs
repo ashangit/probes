@@ -11,7 +11,7 @@ use crate::memcached::header::ResponseHeader;
 //     value: Bytes,
 // }
 pub struct Response {
-    header: ResponseHeader,
+    pub header: ResponseHeader,
     extra: Bytes,
     key: Bytes,
     value: Bytes,

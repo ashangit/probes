@@ -1,7 +1,8 @@
 use std::io::Cursor;
 
 use bytes::{Buf, BytesMut};
-use tokio::io::{AsyncReadExt, BufWriter};
+use log::info;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::{TcpStream, ToSocketAddrs};
 
 use crate::memcached::response::Response;
@@ -33,8 +34,9 @@ impl Connection {
         }
     }
 
-    pub async fn send_request(&mut self, _set: &Set) {
-        //self.stream.write_all().await?;
+    pub async fn send_request(&mut self, set: &mut Set) {
+        self.stream.write_all(set.as_bytes().as_slice()).await;
+        self.stream.flush().await;
     }
 
     pub async fn read_response(
@@ -80,26 +82,20 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn set(&mut self, key: &str, value: Vec<u8>) {
-        let _set = Set::new(key, value, 300);
-        //self.connection.send_request(&set).await?;
+    pub async fn probe(&mut self) {
+        loop {
+            self.set("nico", "value".as_bytes().to_vec()).await;
+        }
     }
-    //
-    // async fn set_cmd(&mut self, cmd: Set) -> crate::Result<()> {
-    //     // Convert the `Set` command into a frame
-    //     let frame = cmd.into_frame();
-    //
-    //     debug!(request = ?frame);
-    //
-    //     // Write the frame to the socket. This writes the full frame to the
-    //     // socket, waiting if necessary.
-    //     self.connection.write_frame(&frame).await?;
-    //
-    //     // Wait for the response from the server. On success, the server
-    //     // responds simply with `OK`. Any other response indicates an error.
-    //     match self.read_response().await? {
-    //         Frame::Simple(response) if response == "OK" => Ok(()),
-    //         frame => Err(frame.to_error()),
-    //     }
-    // }
+
+    pub async fn set(&mut self, key: &str, value: Vec<u8>) {
+        let mut set = Set::new(key, value, 300);
+        self.connection.send_request(&mut set).await;
+        match self.connection.read_response().await.unwrap() {
+            Some(mut resp) => {
+                info!("{}", resp.header.status.get_u16());
+            }
+            None => (),
+        }
+    }
 }

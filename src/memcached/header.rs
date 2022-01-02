@@ -63,7 +63,7 @@ pub struct ResponseHeader {
     pub(crate) key_length: u16,
     pub(crate) extra_length: u8,
     data_type: Bytes,
-    status: Bytes,
+    pub status: Bytes,
     pub(crate) total_body_length: u32,
     opaque: Bytes,
     cas: Bytes,
