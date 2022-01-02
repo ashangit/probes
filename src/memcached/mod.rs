@@ -1,12 +1,13 @@
 use std::io::Cursor;
 
 use bytes::{Buf, BytesMut};
-use log::info;
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::{TcpStream, ToSocketAddrs};
 
 use crate::memcached::response::Response;
 use crate::memcached::set::Set;
+use crate::probes::prometheus::NUMBER_OF_REQUESTS;
 
 mod header;
 mod response;
@@ -91,9 +92,13 @@ impl Client {
     pub async fn set(&mut self, key: &str, value: Vec<u8>) {
         let mut set = Set::new(key, value, 300);
         self.connection.send_request(&mut set).await;
+        // TODO manage failure and none
         match self.connection.read_response().await.unwrap() {
             Some(mut resp) => {
-                info!("{}", resp.header.status.get_u16());
+                //debug!("{}", resp.header.status.get_u16());
+                NUMBER_OF_REQUESTS
+                    .with_label_values(&[resp.header.status.get_u16().to_string().as_str(), "set"])
+                    .inc()
             }
             None => (),
         }

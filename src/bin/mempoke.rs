@@ -2,12 +2,16 @@ use argparse::{ArgumentParser, Store};
 //use console_subscriber;
 use log::error;
 
+use warp::Filter;
+
 use probes::consul::ConsulClient;
+use probes::probes::prometheus::{metrics_handler, register_custom_metrics};
 use probes::probes::ProbeServices;
 
 fn main() -> Result<(), i32> {
     env_logger::init();
     //console_subscriber::init();
+    register_custom_metrics();
 
     let mut consul_hostanme = "localhost".to_string();
     let mut consul_port = 8500;
@@ -52,6 +56,13 @@ fn main() -> Result<(), i32> {
             return Err(0);
         }
         Ok(mt) => mt.block_on(async {
+            tokio::spawn(async {
+                let metrics_route = warp::path!("metrics").and_then(metrics_handler);
+
+                println!("Started on port 8080");
+                warp::serve(metrics_route).run(([0, 0, 0, 0], 8080)).await;
+            });
+
             let consul_client = ConsulClient::new(consul_hostanme, consul_port);
             let mut probe = ProbeServices::new(consul_client, services_tag);
             probe.watch_matching_services().await;

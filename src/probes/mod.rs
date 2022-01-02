@@ -1,3 +1,5 @@
+pub mod prometheus;
+
 use std::collections::HashMap;
 
 use log::{debug, error, info, warn};
