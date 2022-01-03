@@ -1,7 +1,6 @@
 #TODO
 - add bench method with https://doc.rust-lang.org/1.4.0/book/benchmark-tests.html
 - add tick for test based on config
-- add node and cluster name to reported metrics
 - manage failure and error code in response + completely failed for unknown issue?
 - migrate to hyper or axum
 - update doc
@@ -11,4 +10,5 @@
 - check if memory management on bytes can be improved
 - do some bench + add some integration tests
 - link node to a "cluster"
+- update lifetime &'static str
 - what else?

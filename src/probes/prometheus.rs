@@ -6,12 +6,12 @@ lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
     pub static ref NUMBER_OF_REQUESTS: IntCounterVec = IntCounterVec::new(
         Opts::new("number_of_requests", "Number of total requests"),
-        &["status", "type"]
+        &["cluster_name", "socket", "status", "type"]
     )
     .expect("metric can be created");
     pub static ref RESPONSE_TIME_COLLECTOR: HistogramVec = HistogramVec::new(
-        HistogramOpts::new("response_time", "Response Times"),
-        &["type"]
+        HistogramOpts::new("response_time_seconds", "Response Times"),
+        &["cluster_name", "socket", "type"]
     )
     .expect("metric can be created");
 }

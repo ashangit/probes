@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::{TcpStream, ToSocketAddrs};
+use tokio::net::TcpStream;
 
 use crate::memcached::command::{Command, Get, Set};
 use crate::memcached::response::Response;
@@ -13,13 +13,17 @@ mod command;
 mod header;
 mod response;
 
-pub async fn connect<T: ToSocketAddrs>(
-    addr: T,
+pub async fn connect(
+    cluster_name: String,
+    addr: String,
 ) -> Result<Client, Box<dyn std::error::Error + Send + Sync>> {
-    let socket = TcpStream::connect(addr).await?;
+    let socket = TcpStream::connect(addr.clone()).await?;
     let connection = Connection::new(socket);
-
-    Ok(Client { connection })
+    Ok(Client {
+        cluster_name,
+        addr,
+        connection,
+    })
 }
 
 pub struct Connection {
@@ -79,6 +83,8 @@ impl Connection {
 }
 
 pub struct Client {
+    cluster_name: String,
+    addr: String,
     connection: Connection,
 }
 
@@ -109,13 +115,15 @@ impl Client {
                 //debug!("{}", resp.header.status.get_u16());
                 NUMBER_OF_REQUESTS
                     .with_label_values(&[
+                        self.cluster_name.as_str(),
+                        self.addr.as_str(),
                         resp.header.status.get_u16().to_string().as_str(),
                         cmd_type,
                     ])
                     .inc();
                 // TODO measure only succeed?
                 RESPONSE_TIME_COLLECTOR
-                    .with_label_values(&[cmd_type])
+                    .with_label_values(&[self.cluster_name.as_str(), self.addr.as_str(), cmd_type])
                     .observe(start.elapsed().as_secs_f64());
             }
             None => (),

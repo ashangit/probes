@@ -1,5 +1,3 @@
-pub mod prometheus;
-
 use std::collections::HashMap;
 
 use log::{debug, error, info, warn};
@@ -9,6 +7,8 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use crate::consul::{ConsulClient, ServiceNode};
 use crate::memcached;
 use crate::token_bucket::TokenBucket;
+
+pub mod prometheus;
 
 pub struct ProbeServices {
     consul_client: ConsulClient,
@@ -119,8 +119,10 @@ impl ProbeService {
                 debug!("Start to probe node {}", node_name.ip);
                 let (resp_tx, _resp_rx) = oneshot::channel();
                 self.watch_nodes.insert(node_name.ip.clone(), resp_tx);
+                let task_service_name = self.service_name.clone();
+                let addr = format!("{}:{}", node_name.ip.clone(), node_name.port).clone();
                 tokio::spawn(async move {
-                    let mut c_memcache = memcached::connect("localhost:11211").await.unwrap();
+                    let mut c_memcache = memcached::connect(task_service_name, addr).await.unwrap();
                     c_memcache.probe().await;
                 });
             }
