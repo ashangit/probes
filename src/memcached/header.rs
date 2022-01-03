@@ -115,9 +115,9 @@ mod tests {
 
     use bytes::Bytes;
 
+    use crate::memcached::command::SET_OPCODE;
     use crate::memcached::header::{RequestHeader, ResponseHeader};
     use crate::memcached::response::Error;
-    use crate::memcached::set::SET_OPCODE;
 
     #[test]
     fn parse_response_header() {

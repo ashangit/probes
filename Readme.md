@@ -1,5 +1,4 @@
 #TODO
-- manage get
 - add response time
 - manage failure and error code in response + completely failed for unknown issue?
 - migrate to hyper or axum

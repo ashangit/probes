@@ -1,17 +1,16 @@
 use std::io::Cursor;
 
 use bytes::{Buf, BytesMut};
-
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::{TcpStream, ToSocketAddrs};
 
+use crate::memcached::command::{Command, Get, Set};
 use crate::memcached::response::Response;
-use crate::memcached::set::Set;
 use crate::probes::prometheus::NUMBER_OF_REQUESTS;
 
+mod command;
 mod header;
 mod response;
-mod set;
 
 pub async fn connect<T: ToSocketAddrs>(
     addr: T,
@@ -35,8 +34,8 @@ impl Connection {
         }
     }
 
-    pub async fn send_request(&mut self, set: &mut Set) {
-        self.stream.write_all(set.as_bytes().as_slice()).await;
+    pub async fn send_request(&mut self, mut cmd: impl Command) {
+        self.stream.write_all(cmd.as_bytes().as_slice()).await;
         self.stream.flush().await;
     }
 
@@ -85,19 +84,35 @@ pub struct Client {
 impl Client {
     pub async fn probe(&mut self) {
         loop {
-            self.set("nico", "value".as_bytes().to_vec()).await;
+            self.set("nico", "value").await;
+            self.get("nico").await;
         }
     }
 
-    pub async fn set(&mut self, key: &str, value: Vec<u8>) {
-        let mut set = Set::new(key, value, 300);
-        self.connection.send_request(&mut set).await;
+    pub async fn set(&mut self, key: &str, value: &str) {
+        let set = Set::new(key, value, 300);
+        self.connection.send_request(set).await;
         // TODO manage failure and none
         match self.connection.read_response().await.unwrap() {
             Some(mut resp) => {
                 //debug!("{}", resp.header.status.get_u16());
                 NUMBER_OF_REQUESTS
                     .with_label_values(&[resp.header.status.get_u16().to_string().as_str(), "set"])
+                    .inc()
+            }
+            None => (),
+        }
+    }
+
+    pub async fn get(&mut self, key: &str) {
+        let get = Get::new(key);
+        self.connection.send_request(get).await;
+        // TODO manage failure and none
+        match self.connection.read_response().await.unwrap() {
+            Some(mut resp) => {
+                //debug!("{}", resp.header.status.get_u16());
+                NUMBER_OF_REQUESTS
+                    .with_label_values(&[resp.header.status.get_u16().to_string().as_str(), "get"])
                     .inc()
             }
             None => (),
