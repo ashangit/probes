@@ -4,12 +4,6 @@ use bytes::{Buf, Bytes};
 
 use crate::memcached::header::ResponseHeader;
 
-// pub struct FrameRequest {
-//     header: RequestHeader,
-//     extra: Bytes,
-//     key: Bytes,
-//     value: Bytes,
-// }
 pub struct Response {
     pub header: ResponseHeader,
     extra: Bytes,

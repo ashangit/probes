@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::time::Instant;
 
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
@@ -6,7 +7,7 @@ use tokio::net::{TcpStream, ToSocketAddrs};
 
 use crate::memcached::command::{Command, Get, Set};
 use crate::memcached::response::Response;
-use crate::probes::prometheus::NUMBER_OF_REQUESTS;
+use crate::probes::prometheus::{NUMBER_OF_REQUESTS, RESPONSE_TIME_COLLECTOR};
 
 mod command;
 mod header;
@@ -91,29 +92,31 @@ impl Client {
 
     pub async fn set(&mut self, key: &str, value: &str) {
         let set = Set::new(key, value, 300);
-        self.connection.send_request(set).await;
-        // TODO manage failure and none
-        match self.connection.read_response().await.unwrap() {
-            Some(mut resp) => {
-                //debug!("{}", resp.header.status.get_u16());
-                NUMBER_OF_REQUESTS
-                    .with_label_values(&[resp.header.status.get_u16().to_string().as_str(), "set"])
-                    .inc()
-            }
-            None => (),
-        }
+        self.request("set", set).await;
     }
 
     pub async fn get(&mut self, key: &str) {
         let get = Get::new(key);
-        self.connection.send_request(get).await;
+        self.request("get", get).await;
+    }
+
+    pub async fn request(&mut self, cmd_type: &str, cmd: impl Command) {
+        let start = Instant::now();
+        self.connection.send_request(cmd).await;
         // TODO manage failure and none
         match self.connection.read_response().await.unwrap() {
             Some(mut resp) => {
                 //debug!("{}", resp.header.status.get_u16());
                 NUMBER_OF_REQUESTS
-                    .with_label_values(&[resp.header.status.get_u16().to_string().as_str(), "get"])
-                    .inc()
+                    .with_label_values(&[
+                        resp.header.status.get_u16().to_string().as_str(),
+                        cmd_type,
+                    ])
+                    .inc();
+                // TODO measure only succeed?
+                RESPONSE_TIME_COLLECTOR
+                    .with_label_values(&[cmd_type])
+                    .observe(start.elapsed().as_secs_f64());
             }
             None => (),
         }

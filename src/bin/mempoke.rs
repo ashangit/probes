@@ -59,7 +59,7 @@ fn main() -> Result<(), i32> {
             tokio::spawn(async {
                 let metrics_route = warp::path!("metrics").and_then(metrics_handler);
 
-                println!("Started on port 8080");
+                println!("Http server for metrics endpoint started on port 8080");
                 warp::serve(metrics_route).run(([0, 0, 0, 0], 8080)).await;
             });
 

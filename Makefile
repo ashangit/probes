@@ -22,7 +22,7 @@ lint: install-deps
 
 .PHONY: build
 build: test
-	cargo build
+	 cargo build --release
 
 .PHONY: test
 test: install-deps

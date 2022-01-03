@@ -1,5 +1,7 @@
 #TODO
-- add response time
+- add bench method with https://doc.rust-lang.org/1.4.0/book/benchmark-tests.html
+- add tick for test based on config
+- add node and cluster name to reported metrics
 - manage failure and error code in response + completely failed for unknown issue?
 - migrate to hyper or axum
 - update doc
