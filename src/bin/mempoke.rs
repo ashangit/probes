@@ -15,6 +15,7 @@ fn main() -> Result<(), i32> {
 
     let mut consul_hostanme = "localhost".to_string();
     let mut consul_port = 8500;
+    let mut http_port = 8080;
     let mut services_tag = "".to_string();
     {
         // this block limits scope of borrows by ap.refer() method
@@ -37,6 +38,11 @@ fn main() -> Result<(), i32> {
                 "Tag to select services to probe",
             )
             .required();
+        ap.refer(&mut http_port).add_option(
+            &["--http-port"],
+            Store,
+            "Http port for metrics endpoint (default: 8080)",
+        );
         ap.parse_args_or_exit();
     }
 
@@ -56,11 +62,16 @@ fn main() -> Result<(), i32> {
             return Err(0);
         }
         Ok(mt) => mt.block_on(async {
-            tokio::spawn(async {
+            tokio::spawn(async move {
                 let metrics_route = warp::path!("metrics").and_then(metrics_handler);
 
-                println!("Http server for metrics endpoint started on port 8080");
-                warp::serve(metrics_route).run(([0, 0, 0, 0], 8080)).await;
+                println!(
+                    "Http server for metrics endpoint started on port {}",
+                    http_port
+                );
+                warp::serve(metrics_route)
+                    .run(([0, 0, 0, 0], http_port))
+                    .await;
             });
 
             let consul_client = ConsulClient::new(consul_hostanme, consul_port);
