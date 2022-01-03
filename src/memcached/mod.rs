@@ -35,7 +35,7 @@ impl Connection {
     pub fn new(socket: TcpStream) -> Connection {
         Connection {
             stream: BufWriter::new(socket),
-            buffer: BytesMut::with_capacity(1 * 1024),
+            buffer: BytesMut::with_capacity(1024),
         }
     }
 

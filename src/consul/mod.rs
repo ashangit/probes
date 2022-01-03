@@ -62,13 +62,12 @@ impl ConsulClient {
         }
     }
 
-    fn is_matching_service(tag: &String, tags_opt: Option<&Vec<Value>>) -> bool {
+    fn is_matching_service(tag: &str, tags_opt: Option<&Vec<Value>>) -> bool {
         if let Some(tags) = tags_opt {
             if tags
                 .iter()
                 .map(ConsulClient::get_string_value)
-                .collect::<Vec<String>>()
-                .contains(tag)
+                .any(|x| x == *tag)
             {
                 return true;
             }
@@ -77,7 +76,7 @@ impl ConsulClient {
         false
     }
 
-    fn extract_matching_services(tag: &String, body_json: Value) -> Vec<String> {
+    fn extract_matching_services(tag: &str, body_json: Value) -> Vec<String> {
         let empty = Map::new();
         let services = match body_json.as_object() {
             Some(x) => x,
@@ -255,30 +254,24 @@ mod tests {
 
     #[test]
     fn is_matching_service() {
-        assert_eq!(
-            true,
-            ConsulClient::is_matching_service(
-                &"elasticsearch".to_string(),
-                Some(&vec![
-                    Value::String("elasticsearch".to_string()),
-                    Value::String("http".to_string())
-                ])
-            )
-        );
-        assert_eq!(
-            false,
-            ConsulClient::is_matching_service(
-                &"elasticsearch".to_string(),
-                Some(&vec![
-                    Value::String("memcached".to_string()),
-                    Value::String("tcp".to_string())
-                ])
-            )
-        );
-        assert_eq!(
-            false,
-            ConsulClient::is_matching_service(&"elasticsearch".to_string(), None)
-        );
+        assert!(ConsulClient::is_matching_service(
+            &"elasticsearch".to_string(),
+            Some(&vec![
+                Value::String("elasticsearch".to_string()),
+                Value::String("http".to_string())
+            ])
+        ));
+        assert!(!ConsulClient::is_matching_service(
+            &"elasticsearch".to_string(),
+            Some(&vec![
+                Value::String("memcached".to_string()),
+                Value::String("tcp".to_string())
+            ])
+        ));
+        assert!(!ConsulClient::is_matching_service(
+            &"elasticsearch".to_string(),
+            None
+        ));
     }
 
     #[test]

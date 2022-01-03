@@ -26,7 +26,7 @@ impl ProbeServices {
         }
     }
 
-    fn stop_watch_service(&mut self, matching_services: &Vec<String>) {
+    fn stop_watch_service(&mut self, matching_services: &[String]) {
         let mut services_to_remove: Vec<String> = Vec::new();
         for service_name in self.watch_services.keys() {
             if !matching_services.contains(service_name) {
@@ -46,7 +46,7 @@ impl ProbeServices {
         }
     }
 
-    fn add_watch_service(&mut self, matching_services: &Vec<String>) {
+    fn add_watch_service(&mut self, matching_services: &[String]) {
         for service_name in matching_services.iter() {
             if !self.watch_services.contains_key(service_name) {
                 debug!("Start to watch service {}", service_name);
@@ -113,7 +113,7 @@ impl ProbeService {
         }
     }
 
-    fn add_node_probe(&mut self, matching_nodes: &Vec<ServiceNode>) {
+    fn add_node_probe(&mut self, matching_nodes: &[ServiceNode]) {
         for node_name in matching_nodes.iter() {
             if !self.watch_nodes.contains_key(node_name.ip.as_str()) {
                 debug!("Start to probe node {}", node_name.ip);

@@ -6,8 +6,6 @@ use crate::memcached::header::ResponseHeader;
 
 pub struct Response {
     pub header: ResponseHeader,
-    extra: Bytes,
-    key: Bytes,
     value: Bytes,
 }
 
@@ -37,19 +35,14 @@ impl Response {
 
     pub fn parse(src: &mut Cursor<&[u8]>) -> Response {
         let header = ResponseHeader::parse(src);
-        let extra = src.copy_to_bytes(header.extra_length as usize);
-        let key = src.copy_to_bytes(header.key_length as usize);
+        src.advance(header.extra_length as usize);
+        src.advance(header.key_length as usize);
         let value = src.copy_to_bytes(
             header.total_body_length as usize
                 - header.key_length as usize
                 - header.extra_length as usize,
         );
-        Response {
-            header,
-            extra,
-            key,
-            value,
-        }
+        Response { header, value }
     }
 }
 
@@ -89,8 +82,6 @@ mod tests {
         let mut cursor = Cursor::new(decoded.as_slice());
         let response = Response::parse(&mut cursor);
         assert_eq!(response.header.total_body_length, 12);
-        assert_eq!(response.extra, Bytes::from_static(b"\0\0\0\0"));
-        assert_eq!(response.key, Bytes::from_static(b""));
         assert_eq!(response.value, Bytes::from_static(b"TestNico"));
     }
 }

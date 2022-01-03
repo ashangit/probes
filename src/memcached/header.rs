@@ -144,9 +144,7 @@ mod tests {
         let input = "8100000004000000000000050000000000000000000000010000000030";
         let decoded = hex::decode(input).expect("Decoding failed");
         let mut cursor = Cursor::new(decoded.as_slice());
-        let res = ResponseHeader::check(&mut cursor)
-            .ok()
-            .expect("Failed to get total length response");
+        let res = ResponseHeader::check(&mut cursor).expect("Failed to get total length response");
         assert_eq!(res, 29);
     }
 
