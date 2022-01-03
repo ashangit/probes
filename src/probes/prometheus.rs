@@ -1,7 +1,5 @@
 use lazy_static::lazy_static;
-use prometheus::{
-    HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry,
-};
+use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry};
 use warp::{Rejection, Reply};
 
 lazy_static! {
