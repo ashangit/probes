@@ -24,7 +24,7 @@ bytes = "1"
 log = "0.4.0"
 env_logger = "0.8.4"
 # Debug
-#tokio-console = "0.1.0"
+console-subscriber = "0.1.0"
 # Prometheus
 warp = "0.3.2" # TODO use hyper or axum
 prometheus = { version = "0.13.0", features = ["process"] }

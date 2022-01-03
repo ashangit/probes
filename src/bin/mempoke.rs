@@ -1,5 +1,5 @@
 use argparse::{ArgumentParser, Store};
-//use console_subscriber;
+
 use log::error;
 
 use warp::Filter;
@@ -10,7 +10,7 @@ use probes::probes::ProbeServices;
 
 fn main() -> Result<(), i32> {
     env_logger::init();
-    //console_subscriber::init();
+    console_subscriber::init();
     register_custom_metrics();
 
     let mut consul_hostanme = "localhost".to_string();
