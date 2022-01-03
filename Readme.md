@@ -2,7 +2,7 @@
 - add bench method with https://doc.rust-lang.org/1.4.0/book/benchmark-tests.html
 - add tick for test based on config
 - manage failure and error code in response + completely failed for unknown issue?
-- migrate to hyper or axum
+- manage error on axum response
 - update doc
 - remove intermediate service discovery -> directly discover nodes
 - manage removal of nodes -> stop probes on nodes

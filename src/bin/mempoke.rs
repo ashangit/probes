@@ -1,8 +1,9 @@
+use std::net::SocketAddr;
+
 use argparse::{ArgumentParser, Store};
-
+use axum::routing::get;
+use axum::Router;
 use log::error;
-
-use warp::Filter;
 
 use probes::consul::ConsulClient;
 use probes::probes::prometheus::{metrics_handler, register_custom_metrics};
@@ -63,15 +64,15 @@ fn main() -> Result<(), i32> {
         }
         Ok(mt) => mt.block_on(async {
             tokio::spawn(async move {
-                let metrics_route = warp::path!("metrics").and_then(metrics_handler);
+                let app = Router::new().route("/metrics", get(metrics_handler));
 
-                println!(
-                    "Http server for metrics endpoint started on port {}",
-                    http_port
-                );
-                warp::serve(metrics_route)
-                    .run(([0, 0, 0, 0], http_port))
-                    .await;
+                let addr = SocketAddr::from(([0, 0, 0, 0], http_port));
+                println!("Http server for metrics endpoint listening on {}", addr);
+                //tracing::debug!("listening on {}", addr);
+                axum::Server::bind(&addr)
+                    .serve(app.into_make_service())
+                    .await
+                    .unwrap();
             });
 
             let consul_client = ConsulClient::new(consul_hostanme, consul_port);

@@ -26,6 +26,6 @@ env_logger = "0.8.4"
 # Debug
 console-subscriber = "0.1.0"
 # Prometheus
-warp = "0.3.2" # TODO use hyper or axum
+axum = "0.4.3"
 prometheus = { version = "0.13.0", features = ["process"] }
 lazy_static = "1.4"

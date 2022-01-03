@@ -1,6 +1,5 @@
 use lazy_static::lazy_static;
 use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry};
-use warp::{Rejection, Reply};
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
@@ -26,7 +25,7 @@ pub fn register_custom_metrics() {
         .expect("collector can be registered");
 }
 
-pub async fn metrics_handler() -> Result<impl Reply, Rejection> {
+pub async fn metrics_handler() -> String {
     use prometheus::Encoder;
     let encoder = prometheus::TextEncoder::new();
 
@@ -57,5 +56,5 @@ pub async fn metrics_handler() -> Result<impl Reply, Rejection> {
     buffer.clear();
 
     res.push_str(&res_custom);
-    Ok(res)
+    res
 }
