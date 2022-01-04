@@ -35,12 +35,13 @@ impl ProbeServices {
 
     fn stop_nodes_probe(&mut self, matching_nodes: &[ServiceNode]) {
         let mut nodes_to_stop: Vec<String> = Vec::new();
-        let matchine_nodes_name = matching_nodes
-            .iter()
-            .map(|node_name| format!("{}:{}", node_name.ip.clone(), node_name.port))
-            .collect::<Vec<String>>();
         for node in self.watch_nodes.keys() {
-            if !matchine_nodes_name.contains(node) {
+            // TODO improve the comparison
+            if !matching_nodes
+                .iter()
+                .map(|node_name| format!("{}:{}", node_name.ip.clone(), node_name.port))
+                .any(|x| x == *node)
+            {
                 nodes_to_stop.push(node.clone());
             }
         }
