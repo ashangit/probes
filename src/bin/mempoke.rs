@@ -1,6 +1,5 @@
 use argparse::{ArgumentParser, Store};
 
-
 use log::error;
 
 use probes::probes::init_probing;

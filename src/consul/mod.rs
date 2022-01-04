@@ -11,11 +11,6 @@ pub struct ConsulClient {
     client: Client<HttpConnector>,
 }
 
-pub struct WatchedServices {
-    pub index: i64,
-    pub services: Vec<String>,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct ServiceNode {
     pub service_name: String,
@@ -98,6 +93,7 @@ impl ConsulClient {
             tag,
             matching_services.join(", ")
         );
+
         matching_services
     }
 
@@ -110,6 +106,7 @@ impl ConsulClient {
             .unwrap()
             .to_string();
         let service_port = node.get("ServicePort").unwrap().as_i64().unwrap();
+
         ServiceNode {
             service_name,
             ip: service_address,
@@ -148,6 +145,7 @@ impl ConsulClient {
             warn!("Consul index < 0. . Will need to reset it to 0");
             return 0;
         }
+
         _index
     }
 
