@@ -4,10 +4,9 @@
 - manage failure and error code in response + completely failed for unknown issue?
 - manage error on axum response
 - update doc
-- remove intermediate service discovery -> directly discover nodes
-- manage removal of nodes -> stop probes on nodes
+- manage stop probes on nodes + remove old metrics
+- add metrics for error consul
 - check if memory management on bytes can be improved
 - do some bench + add some integration tests
-- update lifetime &'static str
 - use tracing for logging
 - what else?

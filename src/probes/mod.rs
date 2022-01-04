@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use tokio::sync::oneshot;
-use tokio::sync::oneshot::{Receiver, Sender};
+use tokio::sync::oneshot::error::TryRecvError;
+use tokio::sync::oneshot::Sender;
 
 use crate::consul::{ConsulClient, ServiceNode};
 use crate::memcached;
@@ -13,7 +14,7 @@ pub mod prometheus;
 pub struct ProbeServices {
     consul_client: ConsulClient,
     tag: String,
-    watch_services: HashMap<String, Sender<u8>>,
+    watch_nodes: HashMap<String, Sender<u8>>,
 }
 
 impl ProbeServices {
@@ -22,41 +23,61 @@ impl ProbeServices {
         ProbeServices {
             consul_client,
             tag,
-            watch_services: HashMap::new(),
+            watch_nodes: HashMap::new(),
         }
     }
 
-    fn stop_watch_service(&mut self, matching_services: &[String]) {
-        let mut services_to_remove: Vec<String> = Vec::new();
-        for service_name in self.watch_services.keys() {
-            if !matching_services.contains(service_name) {
-                services_to_remove.push(service_name.clone());
+    fn stop_nodes_probe(&mut self, matching_nodes: &[ServiceNode]) {
+        let mut nodes_to_stop: Vec<String> = Vec::new();
+        let matchine_nodes_name = matching_nodes
+            .iter()
+            .map(|node_name| format!("{}:{}", node_name.ip.clone(), node_name.port))
+            .collect::<Vec<String>>();
+        for node in self.watch_nodes.keys() {
+            if !matchine_nodes_name.contains(node) {
+                nodes_to_stop.push(node.clone());
             }
         }
 
-        for service_name in services_to_remove.iter() {
-            // TODO call queue to stop async of service
-            debug!("Stop watching service {}", service_name);
-            match self.watch_services.remove(service_name) {
+        for node in nodes_to_stop.iter() {
+            debug!("Stop monitoring node {}", node);
+            match self.watch_nodes.remove(node) {
                 Some(resp_tx) => {
                     resp_tx.send(1);
                 }
-                None => warn!("Service {} is not a watched services", service_name),
+                None => warn!("Node {} is not a monitored node", node),
             }
         }
     }
 
-    fn add_watch_service(&mut self, matching_services: &[String]) {
-        for service_name in matching_services.iter() {
-            if !self.watch_services.contains_key(service_name) {
-                debug!("Start to watch service {}", service_name);
-                let (resp_tx, resp_rx) = oneshot::channel();
-                self.watch_services.insert(service_name.clone(), resp_tx);
-                let cc = self.consul_client.clone();
-                let s = service_name.clone();
+    fn start_nodes_probe(&mut self, matching_nodes: &[ServiceNode]) {
+        for node_name in matching_nodes.iter() {
+            if !self.watch_nodes.contains_key(node_name.ip.as_str()) {
+                debug!("Start to probe node {}", node_name.ip);
+                let (resp_tx, mut resp_rx) = oneshot::channel();
+                let task_service_name = node_name.service_name.clone();
+                let addr = format!("{}:{}", node_name.ip.clone(), node_name.port).clone();
+                self.watch_nodes.insert(addr.clone(), resp_tx);
                 tokio::spawn(async move {
-                    let mut probe_service = ProbeService::new(s, cc, resp_rx);
-                    probe_service.watch_service().await;
+                    let mut c_memcache = memcached::connect(task_service_name, addr).await.unwrap();
+                    loop {
+                        c_memcache.probe().await;
+                        match resp_rx.try_recv() {
+                            Ok(_) => {
+                                // Manage stop
+                                // break loop + remove metrics
+                                break;
+                            }
+                            Err(TryRecvError::Empty) => {
+                                // continue
+                            }
+                            Err(TryRecvError::Closed) => {
+                                // Manage stop
+                                // break loop + remove metrics
+                                break;
+                            }
+                        }
+                    }
                 });
             }
         }
@@ -74,84 +95,14 @@ impl ProbeServices {
             // TODO manage error here? failed prog or just display error?
             match self
                 .consul_client
-                .list_matching_services(index, self.tag.clone())
+                .list_matching_nodes(index, self.tag.clone())
                 .await
             {
-                Ok(matching_services) => {
-                    index = matching_services.index;
+                Ok(matching_nodes) => {
+                    index = matching_nodes.index;
 
-                    self.stop_watch_service(&matching_services.services);
-                    self.add_watch_service(&matching_services.services);
-                }
-                Err(err) => {
-                    error!("Failed to get list of matching services: {}", err);
-                }
-            };
-        }
-    }
-}
-
-pub struct ProbeService {
-    service_name: String,
-    consul_client: ConsulClient,
-    resp_rx: Receiver<u8>,
-    watch_nodes: HashMap<String, Sender<u8>>,
-}
-
-impl ProbeService {
-    pub fn new(
-        service_name: String,
-        consul_client: ConsulClient,
-        resp_rx: Receiver<u8>,
-    ) -> ProbeService {
-        debug!("Create a probe for service {}", service_name);
-        ProbeService {
-            service_name,
-            consul_client,
-            resp_rx,
-            watch_nodes: HashMap::new(),
-        }
-    }
-
-    fn add_node_probe(&mut self, matching_nodes: &[ServiceNode]) {
-        for node_name in matching_nodes.iter() {
-            if !self.watch_nodes.contains_key(node_name.ip.as_str()) {
-                debug!("Start to probe node {}", node_name.ip);
-                let (resp_tx, _resp_rx) = oneshot::channel();
-                self.watch_nodes.insert(node_name.ip.clone(), resp_tx);
-                let task_service_name = self.service_name.clone();
-                let addr = format!("{}:{}", node_name.ip.clone(), node_name.port).clone();
-                tokio::spawn(async move {
-                    let mut c_memcache = memcached::connect(task_service_name, addr).await.unwrap();
-                    c_memcache.probe().await;
-                });
-            }
-        }
-    }
-
-    // TODO create memcached client with set and get (https://www.slideshare.net/tmaesaka/memcached-binary-protocol-in-a-nutshell-presentation)
-    pub async fn watch_service(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("Start watching service {}", self.service_name);
-        let mut token_bucket = TokenBucket::new(60, 1);
-        let mut index = 0;
-
-        loop {
-            token_bucket.wait_for(60).await?;
-
-            // TODO manage error here? failed prog or just display error?
-            match self
-                .consul_client
-                .list_nodes_for_service(index, self.service_name.clone())
-                .await
-            {
-                Ok(service_nodes) => {
-                    // TODO init one async task per service found if not in vec with an smp channel to send msg
-                    //   send stop to channel if not in service list but in vec (del from vec)
-                    index = service_nodes.index;
-
-                    // TODO watch for list of nodes and get external fqdn?
-
-                    self.add_node_probe(&service_nodes.nodes);
+                    self.stop_nodes_probe(&matching_nodes.nodes);
+                    self.start_nodes_probe(&matching_nodes.nodes);
                 }
                 Err(err) => {
                     error!("Failed to get list of matching services: {}", err);

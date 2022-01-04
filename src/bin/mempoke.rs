@@ -71,6 +71,7 @@ fn main() -> Result<(), i32> {
             return Err(0);
         }
         Ok(mt) => mt.block_on(async {
+            // Init prometheus endpoint
             tokio::spawn(async move {
                 let app = Router::new().route("/metrics", get(metrics_handler));
 
@@ -83,6 +84,7 @@ fn main() -> Result<(), i32> {
                     .unwrap();
             });
 
+            // Start probing
             let consul_client = ConsulClient::new(consul_hostanme, consul_port);
             let mut probe = ProbeServices::new(consul_client, services_tag);
             probe.watch_matching_services().await;

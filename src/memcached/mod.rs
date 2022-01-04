@@ -90,10 +90,8 @@ pub struct Client {
 
 impl Client {
     pub async fn probe(&mut self) {
-        loop {
-            self.set("nico", "value").await;
-            self.get("nico").await;
-        }
+        self.set("nico", "value").await;
+        self.get("nico").await;
     }
 
     pub async fn set(&mut self, key: &str, value: &str) {
