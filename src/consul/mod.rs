@@ -47,7 +47,7 @@ impl ConsulClient {
     /// use probes::consul::ConsulClient;
     /// let mut consul_client = ConsulClient::new("localhost".to_string(), 8500);
     /// ```
-    pub fn new(hostname: String, port: u64) -> ConsulClient {
+    pub fn new(hostname: String, port: u16) -> ConsulClient {
         debug!("Create consul client {}:{}", hostname, port);
         ConsulClient {
             fqdn: format!("{}:{}", hostname, port),

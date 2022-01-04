@@ -11,6 +11,12 @@ use crate::token_bucket::TokenBucket;
 
 pub mod prometheus;
 
+pub async fn init_probing(services_tag: String, consul_hostname: String, consul_port: u16) {
+    let consul_client = ConsulClient::new(consul_hostname, consul_port);
+    let mut probe = ProbeServices::new(consul_client, services_tag);
+    probe.watch_matching_services().await;
+}
+
 pub struct ProbeServices {
     consul_client: ConsulClient,
     tag: String,

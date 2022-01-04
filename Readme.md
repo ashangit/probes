@@ -9,4 +9,6 @@
 - check if memory management on bytes can be improved
 - do some bench + add some integration tests
 - use tracing for logging
+- test the incomplete work fine with reading buffer
+- increase value size to 1Kb and see for key
 - what else?

@@ -1,3 +1,7 @@
+use std::net::SocketAddr;
+
+use axum::routing::get;
+use axum::Router;
 use lazy_static::lazy_static;
 use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry};
 
@@ -25,7 +29,7 @@ pub fn register_custom_metrics() {
         .expect("collector can be registered");
 }
 
-pub async fn metrics_handler() -> String {
+async fn metrics_handler() -> String {
     use prometheus::Encoder;
     let encoder = prometheus::TextEncoder::new();
 
@@ -57,4 +61,16 @@ pub async fn metrics_handler() -> String {
 
     res.push_str(&res_custom);
     res
+}
+
+pub async fn init_prometheus_http_endpoint(http_port: u16) {
+    let app = Router::new().route("/metrics", get(metrics_handler));
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], http_port));
+    println!("Http server for metrics endpoint listening on {}", addr);
+    //tracing::debug!("listening on {}", addr);
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }
