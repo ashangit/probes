@@ -11,13 +11,14 @@ use probes::probes::ProbeServices;
 
 fn main() -> Result<(), i32> {
     env_logger::init();
-    console_subscriber::init();
     register_custom_metrics();
 
     let mut consul_hostanme = "localhost".to_string();
     let mut consul_port = 8500;
     let mut http_port = 8080;
     let mut services_tag = "".to_string();
+    let mut tokio_console = false;
+
     {
         // this block limits scope of borrows by ap.refer() method
         let mut ap = ArgumentParser::new();
@@ -39,6 +40,11 @@ fn main() -> Result<(), i32> {
                 "Tag to select services to probe",
             )
             .required();
+        ap.refer(&mut tokio_console).add_option(
+            &["--tokio-console"],
+            Store,
+            "Enable console subscriber for the tokio console (default: false)",
+        );
         ap.refer(&mut http_port).add_option(
             &["--http-port"],
             Store,
@@ -47,8 +53,10 @@ fn main() -> Result<(), i32> {
         ap.parse_args_or_exit();
     }
 
-    // TODO: Create dedicated worker pool for probing and use mono thread runtime for services discovery?
-    // TODO check all unwrap and improve exception management
+    if tokio_console {
+        console_subscriber::init();
+    }
+
     let mt_rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_name("MemPoke")

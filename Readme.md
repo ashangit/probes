@@ -8,7 +8,6 @@
 - manage removal of nodes -> stop probes on nodes
 - check if memory management on bytes can be improved
 - do some bench + add some integration tests
-- link node to a "cluster"
 - update lifetime &'static str
 - use tracing for logging
 - what else?
