@@ -1,12 +1,11 @@
 use std::io::Cursor;
 
-use bytes::{Buf, Bytes};
+use bytes::Buf;
 
 use crate::memcached::header::ResponseHeader;
 
 pub struct Response {
     pub header: ResponseHeader,
-    value: Bytes,
 }
 
 #[derive(Debug, PartialEq)]
@@ -35,22 +34,13 @@ impl Response {
 
     pub fn parse(src: &mut Cursor<&[u8]>) -> Response {
         let header = ResponseHeader::parse(src);
-        src.advance(header.extra_length as usize);
-        src.advance(header.key_length as usize);
-        let value = src.copy_to_bytes(
-            header.total_body_length as usize
-                - header.key_length as usize
-                - header.extra_length as usize,
-        );
-        Response { header, value }
+        Response { header }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
-
-    use bytes::Bytes;
 
     use crate::memcached::response::{Error, Response};
 
@@ -82,6 +72,5 @@ mod tests {
         let mut cursor = Cursor::new(decoded.as_slice());
         let response = Response::parse(&mut cursor);
         assert_eq!(response.header.total_body_length, 12);
-        assert_eq!(response.value, Bytes::from_static(b"TestNico"));
     }
 }
