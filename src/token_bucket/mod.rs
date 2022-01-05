@@ -1,6 +1,6 @@
-use log::{debug, error};
 use tokio::time::Instant;
 use tokio::time::{sleep, Duration};
+use tracing::{debug, error};
 
 // Represent a token bucket rate limiter
 pub struct TokenBucket {

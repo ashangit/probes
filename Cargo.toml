@@ -15,17 +15,20 @@ path = "src/bin/mempoke.rs"
 tokio = { version = "1", features = ["full", "tracing"] }
 # Http client
 hyper = { version = "0.14", features = ["full"] }
+# Prometheus
+prometheus = { version = "0.13", features = ["process"] }
+lazy_static = "1.4"
+axum = "0.4"
+# Log
+#log = "0.4"
+#env_logger = "0.8"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tracing-futures = "0.2"
 # Other
 argparse = "0.2.2"
 serde_json = "1.0"
 hex = "0.4.3"
 bytes = "1"
-# Log
-log = "0.4.0"
-env_logger = "0.8.4"
 # Debug
 console-subscriber = "0.1.0"
-# Prometheus
-axum = "0.4.3"
-prometheus = { version = "0.13.0", features = ["process"] }
-lazy_static = "1.4"

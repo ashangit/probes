@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
-use log::{debug, error, info, warn};
+use std::fmt::Debug;
+
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::oneshot::Sender;
+use tracing::log::warn;
+use tracing::{debug, error, info};
 
 use crate::consul::{ConsulClient, ServiceNode};
 use crate::memcached;
@@ -22,6 +25,7 @@ pub async fn init_probing(
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct ProbeServices {
     consul_client: ConsulClient,
     tag: String,

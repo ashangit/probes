@@ -1,9 +1,9 @@
 use std::io::Cursor;
 
-use crate::memcached::{MemcachedError, MemcachedErrorKind};
 use bytes::Buf;
 
 use crate::memcached::header::ResponseHeader;
+use crate::memcached::{MemcachedError, MemcachedErrorKind};
 
 pub struct Response {
     pub header: ResponseHeader,
@@ -35,10 +35,10 @@ impl Response {
 
 #[cfg(test)]
 mod tests {
-    use crate::memcached::{MemcachedError, MemcachedErrorKind};
     use std::io::Cursor;
 
     use crate::memcached::response::Response;
+    use crate::memcached::{MemcachedError, MemcachedErrorKind};
 
     fn check(input: &str) -> Result<usize, MemcachedError> {
         let decoded = hex::decode(input).expect("Decoding failed");

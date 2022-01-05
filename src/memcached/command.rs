@@ -3,25 +3,19 @@ use crate::memcached::header::RequestHeader;
 const SET_EXTRA_LEN: u8 = 8;
 
 pub const GET_OPCODE: u8 = 0;
+
 pub struct Get {
     header: RequestHeader,
     key: &'static [u8],
 }
 
 pub const SET_OPCODE: u8 = 1;
+
 pub struct Set {
     header: RequestHeader,
     key: &'static [u8],
     value: &'static [u8],
     extra_field: [u8; SET_EXTRA_LEN as usize],
-}
-
-pub trait Command {
-    // Associated function signature; `Self` refers to the implementor type.
-    //fn new(name: &'static str) -> Self;
-
-    // Method signatures; these will return a string.
-    fn as_bytes(&mut self) -> Vec<u8>;
 }
 
 impl Set {
@@ -43,6 +37,18 @@ impl Set {
     }
 }
 
+impl Get {
+    pub fn new(key: &'static [u8]) -> Get {
+        let header = RequestHeader::new(GET_OPCODE, key.len() as u16, 0, 0);
+        Get { header, key }
+    }
+}
+
+pub trait Command {
+    // Method signatures; these will return a string.
+    fn as_bytes(&mut self) -> Vec<u8>;
+}
+
 impl Command for Set {
     fn as_bytes(&mut self) -> Vec<u8> {
         let mut req: Vec<u8> = Vec::new();
@@ -51,13 +57,6 @@ impl Command for Set {
         req.extend(self.key);
         req.extend(self.value);
         req
-    }
-}
-
-impl Get {
-    pub fn new(key: &'static [u8]) -> Get {
-        let header = RequestHeader::new(GET_OPCODE, key.len() as u16, 0, 0);
-        Get { header, key }
     }
 }
 

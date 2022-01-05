@@ -5,6 +5,7 @@ use axum::routing::get;
 use axum::Router;
 use lazy_static::lazy_static;
 use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, Opts, Registry};
+use tracing::{error, info};
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
@@ -58,13 +59,13 @@ async fn metrics_handler() -> Result<String, StatusCode> {
 
     let mut buffer = Vec::new();
     if let Err(_e) = encoder.encode(&REGISTRY.gather(), &mut buffer) {
-        //eprintln!("could not encode custom metrics: {}", e);
+        //error!("could not encode custom metrics: {}", e.into());
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
     let mut res = match String::from_utf8(buffer.clone()) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("custom metrics could not be from_utf8'd: {}", e);
+            error!("custom metrics could not be from_utf8'd: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
@@ -72,13 +73,13 @@ async fn metrics_handler() -> Result<String, StatusCode> {
 
     let mut buffer = Vec::new();
     if let Err(_e) = encoder.encode(&prometheus::gather(), &mut buffer) {
-        //eprintln!("could not encode prometheus metrics: {}", e);
+        //error!("could not encode prometheus metrics: {}", e.into());
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
     let res_custom = match String::from_utf8(buffer.clone()) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("prometheus metrics could not be from_utf8'd: {}", e);
+            error!("prometheus metrics could not be from_utf8'd: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
@@ -94,8 +95,7 @@ pub async fn init_prometheus_http_endpoint(http_port: u16) {
         .route("/metrics", get(metrics_handler));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], http_port));
-    println!("Http server for metrics endpoint listening on {}", addr);
-    //tracing::debug!("listening on {}", addr);
+    info!("Http server for metrics endpoint listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await

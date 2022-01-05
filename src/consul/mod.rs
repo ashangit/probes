@@ -3,8 +3,9 @@ use std::fmt;
 
 use hyper::client::HttpConnector;
 use hyper::{Client, Uri};
-use log::{debug, error, warn};
 use serde_json::{Map, Value};
+use tracing::log::warn;
+use tracing::{debug, error};
 
 // Represent a consul client
 #[derive(Debug, Clone)]
@@ -279,19 +280,19 @@ mod tests {
             &"elasticsearch".to_string(),
             Some(&vec![
                 Value::String("elasticsearch".to_string()),
-                Value::String("http".to_string())
-            ])
+                Value::String("http".to_string()),
+            ]),
         ));
         assert!(!ConsulClient::is_matching_service(
             &"elasticsearch".to_string(),
             Some(&vec![
                 Value::String("memcached".to_string()),
-                Value::String("tcp".to_string())
-            ])
+                Value::String("tcp".to_string()),
+            ]),
         ));
         assert!(!ConsulClient::is_matching_service(
             &"elasticsearch".to_string(),
-            None
+            None,
         ));
     }
 
@@ -305,7 +306,7 @@ mod tests {
             vec!["elasticsearch-secauditlogs-https", "elasticsearch-shared"],
             ConsulClient::extract_matching_services(
                 &"maintenance-elasticsearch".to_string(),
-                body_json
+                body_json,
             )
         );
 
@@ -315,7 +316,7 @@ mod tests {
             empty,
             ConsulClient::extract_matching_services(
                 &"maintenance-elasticsearch".to_string(),
-                serde_json::from_str("{}").unwrap()
+                serde_json::from_str("{}").unwrap(),
             )
         );
     }
@@ -336,7 +337,7 @@ mod tests {
             ServiceNode {
                 service_name: "service_test".to_string(),
                 ip: "127.0.0.1".to_string(),
-                port: 1045
+                port: 1045,
             },
             ConsulClient::get_service_address_port("service_test".to_string(), &node_value)
         );
