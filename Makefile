@@ -27,8 +27,7 @@ build: test
 .PHONY: test
 test: install-deps
 	cargo fmt --all -- --check
-	# TODO: cargo clippy -- -D warnings
-	cargo clippy
+	cargo clippy -- -D warnings
 	cargo test
 
 .PHONY: run
