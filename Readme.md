@@ -11,4 +11,5 @@
 - use tracing for logging
 - test the incomplete work fine with reading buffer
 - increase value size to 1Kb and see for key
+- using multiplexing to send multiple request on the same host even if no response from previous
 - what else?

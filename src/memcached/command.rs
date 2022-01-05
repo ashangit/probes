@@ -1,18 +1,19 @@
 use crate::memcached::header::RequestHeader;
 
+const SET_EXTRA_LEN: u8 = 8;
+
 pub const GET_OPCODE: u8 = 0;
 pub struct Get {
     header: RequestHeader,
-    key: Vec<u8>,
+    key: &'static [u8],
 }
 
 pub const SET_OPCODE: u8 = 1;
-pub const SET_EXTRA_LEN: u8 = 8;
 pub struct Set {
     header: RequestHeader,
-    key: Vec<u8>,
-    value: Vec<u8>,
-    extra_field: Vec<u8>,
+    key: &'static [u8],
+    value: &'static [u8],
+    extra_field: [u8; SET_EXTRA_LEN as usize],
 }
 
 pub trait Command {
@@ -24,22 +25,20 @@ pub trait Command {
 }
 
 impl Set {
-    pub fn new(key: &str, value: &str, expire: u64) -> Set {
-        // extra_field from expire
-        let extra_field: [u8; SET_EXTRA_LEN as usize] = expire.to_be_bytes();
-        let key_vec = key.as_bytes().to_vec();
-        let value_vec = value.as_bytes().to_vec();
+    pub fn new(key: &'static [u8], value: &'static [u8], ttl: u64) -> Set {
+        let extra_field: [u8; SET_EXTRA_LEN as usize] = ttl.to_be_bytes();
+
         let header = RequestHeader::new(
             SET_OPCODE,
-            key_vec.len() as u16,
+            key.len() as u16,
             SET_EXTRA_LEN,
-            value_vec.len() as u32,
+            value.len() as u32,
         );
         Set {
             header,
-            key: key_vec,
-            value: value_vec,
-            extra_field: extra_field.to_vec(),
+            key,
+            value,
+            extra_field,
         }
     }
 }
@@ -49,20 +48,16 @@ impl Command for Set {
         let mut req: Vec<u8> = Vec::new();
         req.extend(self.header.as_bytes());
         req.extend(&self.extra_field);
-        req.extend(&self.key);
-        req.extend(&self.value);
+        req.extend(self.key);
+        req.extend(self.value);
         req
     }
 }
 
 impl Get {
-    pub fn new(key: &str) -> Get {
-        let key_vec = key.as_bytes().to_vec();
-        let header = RequestHeader::new(GET_OPCODE, key_vec.len() as u16, 0, 0);
-        Get {
-            header,
-            key: key_vec,
-        }
+    pub fn new(key: &'static [u8]) -> Get {
+        let header = RequestHeader::new(GET_OPCODE, key.len() as u16, 0, 0);
+        Get { header, key }
     }
 }
 
@@ -70,7 +65,7 @@ impl Command for Get {
     fn as_bytes(&mut self) -> Vec<u8> {
         let mut req: Vec<u8> = Vec::new();
         req.extend(self.header.as_bytes());
-        req.extend(&self.key);
+        req.extend(self.key);
         req
     }
 }
@@ -84,7 +79,7 @@ mod tests {
         let input =
             "80010004080000000000001100000000000000000000000000000000000000647465737476616c7565";
         let decoded = hex::decode(input).expect("Decoding failed");
-        let mut set = Set::new("test", "value", 100);
+        let mut set = Set::new("test".as_bytes(), "value".as_bytes(), 100);
         assert_eq!(set.as_bytes(), decoded)
     }
 
@@ -92,7 +87,7 @@ mod tests {
     fn get_as_bytes() {
         let input = "80000004000000000000000400000000000000000000000074657374";
         let decoded = hex::decode(input).expect("Decoding failed");
-        let mut get = Get::new("test");
+        let mut get = Get::new("test".as_bytes());
         assert_eq!(get.as_bytes(), decoded)
     }
 }

@@ -13,6 +13,10 @@ mod command;
 mod header;
 mod response;
 
+const KEY: &[u8] = "mempoke_key".as_bytes();
+const VALUE: &[u8]= "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
+const TTL: u64 = 300;
+
 pub async fn connect(
     cluster_name: String,
     addr: String,
@@ -90,18 +94,16 @@ pub struct Client {
 
 impl Client {
     pub async fn probe(&mut self) {
-        self.set("nico", "value").await;
-        self.get("nico").await;
+        self.set().await;
+        self.get().await;
     }
 
-    pub async fn set(&mut self, key: &str, value: &str) {
-        let set = Set::new(key, value, 300);
-        self.request("set", set).await;
+    pub async fn set(&mut self) {
+        self.request("set", Set::new(KEY, VALUE, TTL)).await;
     }
 
-    pub async fn get(&mut self, key: &str) {
-        let get = Get::new(key);
-        self.request("get", get).await;
+    pub async fn get(&mut self) {
+        self.request("get", Get::new(KEY)).await;
     }
 
     pub async fn request(&mut self, cmd_type: &str, cmd: impl Command) {
