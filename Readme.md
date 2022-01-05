@@ -2,7 +2,6 @@
 - add bench method with https://doc.rust-lang.org/1.4.0/book/benchmark-tests.html
 - add tick for test based on config
 - manage failure and error code in response + completely failed for unknown issue?
-- manage error on axum response
 - update doc
 - manage stop probes on nodes + remove old metrics
 - add metrics for error consul
