@@ -1,14 +1,13 @@
 #TODO
 - add bench method with https://doc.rust-lang.org/1.4.0/book/benchmark-tests.html
 - add tick for test based on config
-- manage failure and error code in response + completely failed for unknown issue?
 - update doc
 - manage stop probes on nodes + remove old metrics
-- add metrics for error consul
 - check if memory management on bytes can be improved
 - do some bench + add some integration tests
 - use tracing for logging
 - test the incomplete work fine with reading buffer
-- increase value size to 1Kb and see for key
 - using multiplexing to send multiple request on the same host even if no response from previous
+- manage reconnection on memcached client if network failure: use multi channel between disoc and clients to indicate which client is dead and relaunch it
+- add transformation error code memcached to comprehensive text
 - what else?

@@ -23,6 +23,11 @@ lazy_static! {
         "Number of service discovery failed"
     )
     .expect("metric can be created");
+    pub static ref FAILURE_PROBE: IntCounterVec = IntCounterVec::new(
+        Opts::new("failure_probe", "Failed to run probe action"),
+        &["cluster_name", "socket"]
+    )
+    .expect("metric can be created");
 }
 
 pub fn register_custom_metrics() {
@@ -36,6 +41,10 @@ pub fn register_custom_metrics() {
 
     REGISTRY
         .register(Box::new(FAILURE_SERVICES_DISCOVERY.clone()))
+        .expect("collector can be registered");
+
+    REGISTRY
+        .register(Box::new(FAILURE_PROBE.clone()))
         .expect("collector can be registered");
 }
 

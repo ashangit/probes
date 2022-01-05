@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use bytes::{Buf, Bytes};
 
-use crate::memcached::response::Error;
+use crate::memcached::{MemcachedError, MemcachedErrorKind};
 
 const HEADER_SIZE: u8 = 24;
 
@@ -86,15 +86,15 @@ impl ResponseHeader {
 
     /// Check buffer contains magic field x81 and
     /// has enough bytes to process the header response
-    pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, Error> {
+    pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, MemcachedError> {
         // Check enough bytes to read for a response header
         if src.remaining() < HEADER_SIZE as usize {
-            return Err(Error::Incomplete);
+            return Err(MemcachedErrorKind::Incomplete.into());
         }
 
         // CHeck magic field is the one forResponse Packet
         if src.copy_to_bytes(1) != Bytes::from_static(b"\x81") {
-            return Err(Error::Other);
+            return Err(MemcachedErrorKind::Other.into());
         }
 
         // Read body length field to compute total len response
@@ -117,7 +117,7 @@ mod tests {
 
     use crate::memcached::command::SET_OPCODE;
     use crate::memcached::header::{RequestHeader, ResponseHeader};
-    use crate::memcached::response::Error;
+    use crate::memcached::{MemcachedError, MemcachedErrorKind};
 
     #[test]
     fn parse_response_header() {
@@ -155,7 +155,10 @@ mod tests {
         let mut cursor = Cursor::new(decoded.as_slice());
         let res = ResponseHeader::check(&mut cursor);
         assert!(res.is_err());
-        assert_eq!(res.err().unwrap(), Error::Other);
+        assert_eq!(
+            res.err().unwrap(),
+            MemcachedError(MemcachedErrorKind::Other)
+        );
     }
 
     #[test]
@@ -165,7 +168,10 @@ mod tests {
         let mut cursor = Cursor::new(decoded.as_slice());
         let res = ResponseHeader::check(&mut cursor);
         assert!(res.is_err());
-        assert_eq!(res.err().unwrap(), Error::Incomplete);
+        assert_eq!(
+            res.err().unwrap(),
+            MemcachedError(MemcachedErrorKind::Incomplete)
+        );
     }
 
     #[test]
