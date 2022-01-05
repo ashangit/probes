@@ -9,8 +9,7 @@ fn main() -> Result<(), i32> {
     env_logger::init();
     register_custom_metrics();
 
-    let mut consul_hostname = "localhost".to_string();
-    let mut consul_port = 8500;
+    let mut consul_fqdn = "http://localhost:8500".to_string();
     let mut http_port = 8080;
     let mut services_tag = "".to_string();
     let mut tokio_console = false;
@@ -19,15 +18,10 @@ fn main() -> Result<(), i32> {
         // this block limits scope of borrows by ap.refer() method
         let mut argument_parser = ArgumentParser::new();
         argument_parser.set_description("Memcached Probe (MemPoke)");
-        argument_parser.refer(&mut consul_hostname).add_option(
-            &["--consul-hostname"],
+        argument_parser.refer(&mut consul_fqdn).add_option(
+            &["--consul-fqdn"],
             Store,
-            "Consul hostname (default: localhost)",
-        );
-        argument_parser.refer(&mut consul_port).add_option(
-            &["--consul-port"],
-            Store,
-            "Consul port (default: 8500)",
+            "Consul hostname (default: http://localhost:8500)",
         );
         argument_parser
             .refer(&mut services_tag)
@@ -68,7 +62,7 @@ fn main() -> Result<(), i32> {
             multi_thread_runtime.spawn(init_prometheus_http_endpoint(http_port));
 
             // Init probing
-            multi_thread_runtime.block_on(init_probing(services_tag, consul_hostname, consul_port))
+            multi_thread_runtime.block_on(init_probing(services_tag, consul_fqdn))
         }
         Err(issue) => {
             error!(

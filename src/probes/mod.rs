@@ -7,12 +7,13 @@ use tokio::sync::oneshot::Sender;
 
 use crate::consul::{ConsulClient, ServiceNode};
 use crate::memcached;
+use crate::probes::prometheus::FAILURE_SERVICES_DISCOVERY;
 use crate::token_bucket::TokenBucket;
 
 pub mod prometheus;
 
-pub async fn init_probing(services_tag: String, consul_hostname: String, consul_port: u16) {
-    let consul_client = ConsulClient::new(consul_hostname, consul_port);
+pub async fn init_probing(services_tag: String, consul_fqdn: String) {
+    let consul_client = ConsulClient::new(consul_fqdn);
     let mut probe = ProbeServices::new(consul_client, services_tag);
     probe.watch_matching_services().await;
 }
@@ -99,7 +100,6 @@ impl ProbeServices {
         loop {
             token_bucket.wait_for(60).await?;
 
-            // TODO manage error here? failed prog or just display error?
             match self
                 .consul_client
                 .list_matching_nodes(index, self.tag.clone())
@@ -112,7 +112,10 @@ impl ProbeServices {
                     self.start_nodes_probe(&matching_nodes.nodes);
                 }
                 Err(err) => {
-                    error!("Failed to get list of matching services: {}", err);
+                    index = 0;
+
+                    FAILURE_SERVICES_DISCOVERY.inc();
+                    error!("Failed to sync services: {}", err);
                 }
             };
         }

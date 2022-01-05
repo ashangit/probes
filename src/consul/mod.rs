@@ -40,12 +40,12 @@ impl ConsulClient {
     ///
     /// ```
     /// use probes::consul::ConsulClient;
-    /// let mut consul_client = ConsulClient::new("localhost".to_string(), 8500);
+    /// let mut consul_client = ConsulClient::new("http://localhost:8500".to_string());
     /// ```
-    pub fn new(hostname: String, port: u16) -> ConsulClient {
-        debug!("Create consul client {}:{}", hostname, port);
+    pub fn new(consul_fqdn: String) -> ConsulClient {
+        debug!("Create consul client {}", consul_fqdn);
         ConsulClient {
-            fqdn: format!("{}:{}", hostname, port),
+            fqdn: consul_fqdn,
             client: Client::new(),
         }
     }
@@ -207,7 +207,7 @@ impl ConsulClient {
         &mut self,
         service_name: String,
     ) -> Result<Vec<ServiceNode>, Box<dyn std::error::Error + Send + Sync>> {
-        let services_uri = format!("http://{}/v1/catalog/service/{}", self.fqdn, service_name);
+        let services_uri = format!("{}/v1/catalog/service/{}", self.fqdn, service_name);
 
         let response = self.http_call(services_uri, 0).await?;
 
@@ -220,7 +220,7 @@ impl ConsulClient {
         prev_index: i64,
         tag: String,
     ) -> Result<ServiceNodes, Box<dyn std::error::Error + Send + Sync>> {
-        let services_uri = format!("http://{}/v1/catalog/services", self.fqdn);
+        let services_uri = format!("{}/v1/catalog/services", self.fqdn);
 
         let response = self.http_call(services_uri, prev_index).await?;
 
@@ -232,9 +232,7 @@ impl ConsulClient {
                 Ok(mut service_nodes) => {
                     services_nodes.append(&mut service_nodes);
                 }
-                Err(err) => {
-                    error!("Failed to get list of matching services: {}", err);
-                }
+                Err(issue) => return Err(issue),
             }
         }
 

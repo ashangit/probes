@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
 use lazy_static::lazy_static;
-use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry};
+use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, Opts, Registry};
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
@@ -18,6 +18,11 @@ lazy_static! {
         &["cluster_name", "socket", "type"]
     )
     .expect("metric can be created");
+    pub static ref FAILURE_SERVICES_DISCOVERY: IntCounter = IntCounter::new(
+        "failure_services_discovery",
+        "Number of service discovery failed"
+    )
+    .expect("metric can be created");
 }
 
 pub fn register_custom_metrics() {
@@ -27,6 +32,10 @@ pub fn register_custom_metrics() {
 
     REGISTRY
         .register(Box::new(RESPONSE_TIME_COLLECTOR.clone()))
+        .expect("collector can be registered");
+
+    REGISTRY
+        .register(Box::new(FAILURE_SERVICES_DISCOVERY.clone()))
         .expect("collector can be registered");
 }
 
