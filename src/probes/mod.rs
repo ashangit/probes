@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::oneshot::Sender;
@@ -12,16 +12,20 @@ use crate::token_bucket::TokenBucket;
 
 pub mod prometheus;
 
-pub async fn init_probing(services_tag: String, consul_fqdn: String) {
+pub async fn init_probing(
+    services_tag: String,
+    consul_fqdn: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let consul_client = ConsulClient::new(consul_fqdn);
     let mut probe = ProbeServices::new(consul_client, services_tag);
-    probe.watch_matching_services().await;
+    probe.watch_matching_services().await?;
+    Ok(())
 }
 
 pub struct ProbeServices {
     consul_client: ConsulClient,
     tag: String,
-    watch_nodes: HashMap<String, Sender<u8>>,
+    probe_nodes: HashMap<String, Sender<u8>>,
 }
 
 impl ProbeServices {
@@ -30,42 +34,42 @@ impl ProbeServices {
         ProbeServices {
             consul_client,
             tag,
-            watch_nodes: HashMap::new(),
+            probe_nodes: HashMap::new(),
         }
     }
 
-    fn stop_nodes_probe(&mut self, matching_nodes: &[ServiceNode]) {
-        let mut nodes_to_stop: Vec<String> = Vec::new();
-        for node in self.watch_nodes.keys() {
-            // TODO improve the comparison
-            if !matching_nodes
-                .iter()
-                .map(|node_name| format!("{}:{}", node_name.ip.clone(), node_name.port))
-                .any(|x| x == *node)
-            {
-                nodes_to_stop.push(node.clone());
+    fn stop_nodes_probe(&mut self, discovered_nodes: &HashMap<String, ServiceNode>) {
+        let mut probe_nodes_to_stop: Vec<String> = Vec::new();
+        for probe_node_key in self.probe_nodes.keys() {
+            if !discovered_nodes.contains_key(probe_node_key) {
+                probe_nodes_to_stop.push(probe_node_key.clone());
             }
         }
 
-        for node in nodes_to_stop.iter() {
-            debug!("Stop monitoring node {}", node);
-            match self.watch_nodes.remove(node) {
+        for probe_node_to_stop in probe_nodes_to_stop.iter() {
+            info!("Stop to probe node: {}", probe_node_to_stop);
+            match self.probe_nodes.remove(probe_node_to_stop) {
                 Some(resp_tx) => {
-                    resp_tx.send(1);
+                    resp_tx.send(1).unwrap_or(());
                 }
-                None => warn!("Node {} is not a monitored node", node),
+                None => warn!("Node {} is not a monitored node", probe_node_to_stop),
             }
         }
     }
 
-    fn start_nodes_probe(&mut self, matching_nodes: &[ServiceNode]) {
-        for node_name in matching_nodes.iter() {
-            if !self.watch_nodes.contains_key(node_name.ip.as_str()) {
-                debug!("Start to probe node {}", node_name.ip);
+    fn start_nodes_probe(&mut self, discovered_nodes: &HashMap<String, ServiceNode>) {
+        for discovered_node in discovered_nodes.iter() {
+            let key_node = discovered_node.0.clone();
+            let service_node = discovered_node.1;
+            if !self.probe_nodes.contains_key(key_node.as_str()) {
+                info!("Start to probe node: {}", key_node);
+
                 let (resp_tx, mut resp_rx) = oneshot::channel();
-                let task_service_name = node_name.service_name.clone();
-                let addr = format!("{}:{}", node_name.ip.clone(), node_name.port).clone();
-                self.watch_nodes.insert(addr.clone(), resp_tx);
+                self.probe_nodes.insert(key_node, resp_tx);
+
+                let task_service_name = service_node.service_name.clone();
+                let addr = format!("{}:{}", service_node.ip.clone(), service_node.port).clone();
+
                 tokio::spawn(async move {
                     let mut c_memcache = memcached::connect(task_service_name, addr).await.unwrap();
                     loop {
@@ -105,11 +109,11 @@ impl ProbeServices {
                 .list_matching_nodes(index, self.tag.clone())
                 .await
             {
-                Ok(matching_nodes) => {
-                    index = matching_nodes.index;
+                Ok(discovered_nodes) => {
+                    index = discovered_nodes.index;
 
-                    self.stop_nodes_probe(&matching_nodes.nodes);
-                    self.start_nodes_probe(&matching_nodes.nodes);
+                    self.start_nodes_probe(&discovered_nodes.nodes);
+                    self.stop_nodes_probe(&discovered_nodes.nodes);
                 }
                 Err(err) => {
                     index = 0;

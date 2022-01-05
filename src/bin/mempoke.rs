@@ -1,5 +1,4 @@
 use argparse::{ArgumentParser, Store};
-
 use log::error;
 
 use probes::probes::init_probing;
@@ -62,7 +61,12 @@ fn main() -> Result<(), i32> {
             multi_thread_runtime.spawn(init_prometheus_http_endpoint(http_port));
 
             // Init probing
-            multi_thread_runtime.block_on(init_probing(services_tag, consul_fqdn))
+            if let Err(issue) =
+                multi_thread_runtime.block_on(init_probing(services_tag, consul_fqdn))
+            {
+                error!("Issue during node probing: {}", issue);
+                return Err(2);
+            }
         }
         Err(issue) => {
             error!(
@@ -71,7 +75,7 @@ fn main() -> Result<(), i32> {
             );
             return Err(1);
         }
-    }
+    };
 
     Ok(())
 }

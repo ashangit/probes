@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::fmt;
+
 use hyper::client::HttpConnector;
 use hyper::{Client, Uri};
 use log::{debug, error, warn};
@@ -18,9 +21,19 @@ pub struct ServiceNode {
     pub port: i64,
 }
 
+impl fmt::Display for ServiceNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            format!("{}:{}:{}", self.service_name, self.ip, self.port)
+        )
+    }
+}
+
 pub struct ServiceNodes {
     pub index: i64,
-    pub nodes: Vec<ServiceNode>,
+    pub nodes: HashMap<String, ServiceNode>,
 }
 
 struct HttpCall {
@@ -226,11 +239,13 @@ impl ConsulClient {
 
         let matching_services = ConsulClient::extract_matching_services(&tag, response.body_json);
 
-        let mut services_nodes: Vec<ServiceNode> = Vec::new();
+        let mut services_nodes: HashMap<String, ServiceNode> = HashMap::new();
         for matching_service in matching_services {
             match self.list_nodes_for_service(matching_service).await {
-                Ok(mut service_nodes) => {
-                    services_nodes.append(&mut service_nodes);
+                Ok(service_nodes) => {
+                    for service_node in service_nodes {
+                        services_nodes.insert(service_node.to_string(), service_node);
+                    }
                 }
                 Err(issue) => return Err(issue),
             }
