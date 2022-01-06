@@ -3,6 +3,7 @@ use std::fmt;
 
 use hyper::client::HttpConnector;
 use hyper::{Client, Uri};
+use hyper_tls::HttpsConnector;
 use serde_json::{Map, Value};
 use tracing::log::warn;
 use tracing::{debug, error};
@@ -12,7 +13,7 @@ use tracing::{debug, error};
 pub struct ConsulClient {
     // The fqdn of the consul agent to query
     fqdn: String,
-    client: Client<HttpConnector>,
+    client: Client<HttpsConnector<HttpConnector>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -58,9 +59,11 @@ impl ConsulClient {
     /// ```
     pub fn new(consul_fqdn: String) -> ConsulClient {
         debug!("Create consul client {}", consul_fqdn);
+        let https = HttpsConnector::new();
+
         ConsulClient {
             fqdn: consul_fqdn,
-            client: Client::new(),
+            client: Client::builder().build::<_, hyper::Body>(https),
         }
     }
 

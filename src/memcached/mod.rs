@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
@@ -5,6 +6,7 @@ use std::io::Cursor;
 use std::time::Instant;
 
 use bytes::{Buf, BytesMut};
+use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 use tracing::error;
@@ -125,6 +127,20 @@ impl Connection {
     }
 }
 
+lazy_static! {
+    static ref STATUS_CODE: HashMap<u16, &'static str> = HashMap::from([
+        (0, "NoError"),
+        (1, "KeyNotFound"),
+        (2, "KeyExists"),
+        (3, "ValueTooLarge"),
+        (4, "InvalidArguments"),
+        (5, "ItemNotStored"),
+        (6, "IncrDecrOnNonNumericValue"),
+        (129, "UnknownCommand"),
+        (130, "OutOfMemory"),
+    ]);
+}
+
 pub struct Client {
     cluster_name: String,
     addr: String,
@@ -166,13 +182,13 @@ impl Client {
                     .inc();
                 error!("Failed read response from {}: {}", self.addr, issue);
             }
-            Ok(mut result) => {
+            Ok(result) => {
                 //debug!("{}", resp.header.status.get_u16());
                 NUMBER_OF_REQUESTS
                     .with_label_values(&[
                         self.cluster_name.as_str(),
                         self.addr.as_str(),
-                        result.header.status.get_u16().to_string().as_str(),
+                        STATUS_CODE.get(&result.header.status).unwrap(),
                         cmd_type,
                     ])
                     .inc();

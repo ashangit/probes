@@ -32,7 +32,7 @@ test: install-deps
 
 .PHONY: run
 run: test
-	cargo run
+	RUST_LOG=debug RUSTFLAGS="--cfg tokio_unstable" cargo run --package probes --bin mempoke -- --services-tag memcached
 
 .PHONY: clean
 clean:

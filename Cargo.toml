@@ -15,6 +15,7 @@ path = "src/bin/mempoke.rs"
 tokio = { version = "1", features = ["full", "tracing"] }
 # Http client
 hyper = { version = "0.14", features = ["full"] }
+hyper-tls = "0.5"
 # Prometheus
 prometheus = { version = "0.13", features = ["process"] }
 lazy_static = "1.4"
