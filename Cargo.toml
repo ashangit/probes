@@ -20,8 +20,6 @@ prometheus = { version = "0.13", features = ["process"] }
 lazy_static = "1.4"
 axum = "0.4"
 # Log
-#log = "0.4"
-#env_logger = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-futures = "0.2"

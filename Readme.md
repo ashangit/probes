@@ -5,9 +5,8 @@
 - manage stop probes on nodes + remove old metrics
 - check if memory management on bytes can be improved
 - do some bench + add some integration tests
-- test the incomplete work fine with reading buffer
 - using multiplexing to send multiple request on the same host even if no response from previous
-- manage reconnection on memcached client if network failure: use multi channel between disoc and clients to indicate which client is dead and relaunch it
+- manage reconnection on memcached client if network failure: use multi channel between disco and clients to indicate which client is dead and relaunch it
 - add transformation error code memcached to comprehensive text
 - check unittest
 - what else?
