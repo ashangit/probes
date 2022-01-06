@@ -67,7 +67,6 @@ impl Get {
 }
 
 pub trait Command {
-    // Method signatures; these will return a string.
     fn as_bytes(&mut self) -> Vec<u8>;
 }
 

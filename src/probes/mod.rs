@@ -1,16 +1,18 @@
 use std::collections::HashMap;
-
 use std::fmt::Debug;
 
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::oneshot::{Receiver, Sender};
 use tracing::log::warn;
 use tracing::{debug, error, info};
 
 use crate::consul::{ConsulClient, ServiceNode};
 use crate::memcached;
-use crate::probes::prometheus::FAILURE_SERVICES_DISCOVERY;
+use crate::memcached::STATUS_CODE;
+use crate::probes::prometheus::{
+    FAILURE_PROBE, FAILURE_SERVICES_DISCOVERY, NUMBER_OF_REQUESTS, RESPONSE_TIME_COLLECTOR,
+};
 use crate::token_bucket::TokenBucket;
 
 pub mod prometheus;
@@ -67,10 +69,77 @@ impl ProbeServices {
         for probe_node_to_stop in probe_nodes_to_stop.iter() {
             info!("Stop to probe node: {}", probe_node_to_stop);
             match self.probe_nodes.remove(probe_node_to_stop) {
-                Some(resp_tx) => {
-                    resp_tx.send(1).unwrap_or(());
+                Some(stop_probe_resp_tx) => {
+                    stop_probe_resp_tx.send(1).unwrap_or(());
                 }
                 None => warn!("Node {} is not a monitored node", probe_node_to_stop),
+            }
+        }
+    }
+
+    /// Remove all prometheus metrics of that memcached node
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - name of the memcached service
+    /// * `addr` - socker of the memcached instance monitored
+    ///
+    fn stop_node(service_name: String, addr: String) {
+        FAILURE_PROBE
+            .remove_label_values(&[service_name.as_str(), addr.as_str()])
+            .unwrap_or(());
+
+        for cmd_type in ["set", "get"] {
+            RESPONSE_TIME_COLLECTOR
+                .remove_label_values(&[service_name.as_str(), addr.as_str(), cmd_type])
+                .unwrap_or(());
+
+            for status in STATUS_CODE.keys() {
+                NUMBER_OF_REQUESTS
+                    .remove_label_values(&[
+                        service_name.as_str(),
+                        addr.as_str(),
+                        STATUS_CODE.get(status).unwrap(),
+                        cmd_type,
+                    ])
+                    .unwrap_or(());
+            }
+        }
+    }
+
+    /// The memcached probe
+    /// Manage connection to the memcached
+    /// Check if any message have been send on the stop_probe_resp channel
+    /// If it is the case remove all related prometheus metrics and break the probe loop
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - name of the memcached service
+    /// * `addr` - socker of the memcached instance monitored
+    /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
+    ///
+    async fn start_node_probe(
+        service_name: String,
+        addr: String,
+        mut stop_probe_resp_rx: Receiver<u8>,
+    ) {
+        let mut c_memcache = memcached::connect(service_name.clone(), addr.clone())
+            .await
+            .unwrap();
+        loop {
+            match stop_probe_resp_rx.try_recv() {
+                Ok(_) => {
+                    ProbeServices::stop_node(service_name, addr);
+                    break;
+                }
+                Err(TryRecvError::Empty) => {
+                    c_memcache.probe().await;
+                    // TODO manage failure like connection break to be able to recreate connection stop + send message to main process
+                }
+                Err(TryRecvError::Closed) => {
+                    ProbeServices::stop_node(service_name, addr);
+                    break;
+                }
             }
         }
     }
@@ -89,33 +158,14 @@ impl ProbeServices {
             if !self.probe_nodes.contains_key(key_node.as_str()) {
                 info!("Start to probe node: {}", key_node);
 
-                let (resp_tx, mut resp_rx) = oneshot::channel();
-                self.probe_nodes.insert(key_node, resp_tx);
+                let (stop_probe_resp_tx, stop_probe_resp_rx) = oneshot::channel();
+                self.probe_nodes.insert(key_node, stop_probe_resp_tx);
 
-                let task_service_name = service_node.service_name.clone();
-                let addr = format!("{}:{}", service_node.ip.clone(), service_node.port).clone();
-
-                tokio::spawn(async move {
-                    let mut c_memcache = memcached::connect(task_service_name, addr).await.unwrap();
-                    loop {
-                        c_memcache.probe().await;
-                        match resp_rx.try_recv() {
-                            Ok(_) => {
-                                // Manage stop
-                                // break loop + remove metrics
-                                break;
-                            }
-                            Err(TryRecvError::Empty) => {
-                                // continue
-                            }
-                            Err(TryRecvError::Closed) => {
-                                // Manage stop
-                                // break loop + remove metrics
-                                break;
-                            }
-                        }
-                    }
-                });
+                tokio::spawn(ProbeServices::start_node_probe(
+                    service_node.service_name.clone(),
+                    format!("{}:{}", service_node.ip.clone(), service_node.port).clone(),
+                    stop_probe_resp_rx,
+                ));
             }
         }
     }

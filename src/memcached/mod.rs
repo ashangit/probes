@@ -165,7 +165,7 @@ impl Connection {
 }
 
 lazy_static! {
-    static ref STATUS_CODE: HashMap<u16, &'static str> = HashMap::from([
+    pub static ref STATUS_CODE: HashMap<u16, &'static str> = HashMap::from([
         (0, "NoError"),
         (1, "KeyNotFound"),
         (2, "KeyExists"),

@@ -18,7 +18,7 @@ fmt: install-deps
 
 .PHONY: lint
 lint: install-deps
-	cargo clippy --fix
+	cargo clippy --fix --allow-dirty --allow-staged
 
 .PHONY: build
 build: test
