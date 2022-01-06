@@ -30,6 +30,10 @@ test: install-deps
 	cargo clippy -- -D warnings
 	cargo test
 
+.PHONY: doc
+doc: test
+	cargo doc --open --document-private-items
+
 .PHONY: run
 run: test
 	RUST_LOG=debug RUSTFLAGS="--cfg tokio_unstable" cargo run --package probes --bin mempoke -- --services-tag memcached

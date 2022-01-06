@@ -26,6 +26,19 @@ pub struct RequestHeader {
 }
 
 impl RequestHeader {
+    /// Create a memcached request header
+    ///
+    /// # Arguments
+    ///
+    /// * `opcode` - code of the operation command
+    /// * `key_length` - length of the key
+    /// * `extra_length` - length of the extra field
+    /// * `value_length` - length of the value
+    ///
+    /// # Return
+    ///
+    /// * Result of List ServiceNode or Error
+    ///
     pub fn new(opcode: u8, key_length: u16, extra_length: u8, value_length: u32) -> RequestHeader {
         let total_body_length: u32 = key_length as u32 + extra_length as u32 + value_length;
         RequestHeader {
@@ -41,6 +54,7 @@ impl RequestHeader {
         }
     }
 
+    /// Get representation of the request header as bytes
     pub fn as_bytes(&mut self) -> Vec<u8> {
         let mut request_bytes: Vec<u8> = Vec::with_capacity(HEADER_SIZE as usize);
         request_bytes.push(self.magic);
@@ -70,6 +84,16 @@ pub struct ResponseHeader {
 }
 
 impl ResponseHeader {
+    /// Parse buffer and create a response header
+    ///
+    /// # Arguments
+    ///
+    /// * `src` - buffer of bytes
+    ///
+    /// # Return
+    ///
+    /// * ResponseHeader
+    ///
     pub(crate) fn parse(src: &mut Cursor<&[u8]>) -> ResponseHeader {
         ResponseHeader {
             magic: src.copy_to_bytes(1),
@@ -86,6 +110,17 @@ impl ResponseHeader {
 
     /// Check buffer contains magic field x81 and
     /// has enough bytes to process the header response
+    ///
+    /// # Arguments
+    ///
+    /// * `src` - buffer of bytes
+    ///
+    /// # Return
+    ///
+    /// * The size of bytes to read for the response header
+    ///   or an incomplete error if there are not enough bytes from the buffer
+    ///   or an Other error if header magic is not of type response (x81)
+    ///
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, MemcachedError> {
         // Check enough bytes to read for a response header
         if src.remaining() < HEADER_SIZE as usize {

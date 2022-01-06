@@ -67,6 +67,16 @@ impl ConsulClient {
         }
     }
 
+    /// Get string from json value
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - json value
+    ///
+    /// # Return
+    ///
+    /// * String - the String of the Value or an empty String if the value doesn't contains a String
+    ///
     fn get_string_value(value: &Value) -> String {
         if let Some(x) = value.as_str() {
             x.to_string()
@@ -75,6 +85,17 @@ impl ConsulClient {
         }
     }
 
+    /// Check if tag for probing is available in the list of service tags
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - tag needed on service to enable probing
+    /// * `tags_opt` - list of tags set on the service
+    ///
+    /// # Return
+    ///
+    /// * bool - true if the list of tags_opt contains tag
+    ///
     fn is_matching_service(tag: &str, tags_opt: Option<&Vec<Value>>) -> bool {
         if let Some(tags) = tags_opt {
             if tags
@@ -89,6 +110,17 @@ impl ConsulClient {
         false
     }
 
+    /// Extract list of services with tag for probing
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - tag needed on service to enable probing
+    /// * `body_json` - json from consul catalog services
+    ///
+    /// # Return
+    ///
+    /// * List String - the list of matching service
+    ///
     fn extract_matching_services(tag: &str, body_json: Value) -> Vec<String> {
         let empty = Map::new();
         let services = match body_json.as_object() {
@@ -114,6 +146,17 @@ impl ConsulClient {
         matching_services
     }
 
+    /// Create ServiceNode from json representing a node in consul service
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - name of the service in consul
+    /// * `node_value` - json representing a node in consul service
+    ///
+    /// # Return
+    ///
+    /// * ServiceNode - the definition of a node to probe with service_name, ip and port
+    ///
     fn get_service_address_port(service_name: String, node_value: &Value) -> ServiceNode {
         let node = node_value.as_object().unwrap();
         let service_address = node
@@ -131,6 +174,17 @@ impl ConsulClient {
         }
     }
 
+    /// Extract list of ServiceNodes from consul service json of a specific service
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - name of the service in consul
+    /// * `body_json` - json from consul service of a specific service
+    ///
+    /// # Return
+    ///
+    /// * List ServiceNode - the list of node to probe for a specific service
+    ///
     fn extract_nodes(service_name: String, body_json: Value) -> Vec<ServiceNode> {
         let empty = Vec::new();
         let services = match body_json.as_array() {
@@ -152,7 +206,21 @@ impl ConsulClient {
         nodes
     }
 
-    fn check_index(prev_index: i64, _index: i64) -> i64 {
+    /// Get watch index value
+    ///
+    /// The index returned by consul for watch must be greater than 0 and grater than previous index
+    /// otherwise it should be reset to 0
+    ///
+    /// # Arguments
+    ///
+    /// * `prev_index` - previous index value
+    /// * `_index` - new index value
+    ///
+    /// # Return
+    ///
+    /// * int - index value that will be used on next watch
+    ///
+    fn get_watch_index(prev_index: i64, _index: i64) -> i64 {
         if _index < prev_index {
             warn!("Consul index querying list of services is lower than previous one. Will need to reset it to 0");
             return 0;
@@ -166,6 +234,20 @@ impl ConsulClient {
         _index
     }
 
+    /// Manage http call to consul agent endpoint
+    ///
+    /// Rely on watch mechanism based on index value
+    ///
+    /// # Arguments
+    ///
+    /// * `uri_str` - consul uri to call
+    /// * `prev_index` - index value of last http call
+    ///
+    /// # Return
+    ///
+    /// * Result of HttpCall or Error - HttpCall contains the new index for watching
+    ///   and the return json body from consul
+    ///
     async fn http_call(
         &mut self,
         uri_str: String,
@@ -197,7 +279,7 @@ impl ConsulClient {
 
         let resp_index: i64 = if let Some(consul_index) = parts.headers.get("x-consul-index") {
             let mut _index = consul_index.to_str().unwrap().parse()?;
-            ConsulClient::check_index(prev_index, _index)
+            ConsulClient::get_watch_index(prev_index, _index)
         } else {
             warn!("Missing x-consul-index header. Setting index to 0");
             0
@@ -220,18 +302,39 @@ impl ConsulClient {
         })
     }
 
+    /// Get the list of nodes for a service from consul endpoint
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - name of the consul service
+    ///
+    /// # Return
+    ///
+    /// * Result of List ServiceNode or Error
+    ///
     async fn list_nodes_for_service(
         &mut self,
         service_name: String,
     ) -> Result<Vec<ServiceNode>, Box<dyn std::error::Error + Send + Sync>> {
-        let services_uri = format!("{}/v1/catalog/service/{}", self.fqdn, service_name);
+        let service_uri = format!("{}/v1/catalog/service/{}", self.fqdn, service_name);
 
-        let response = self.http_call(services_uri, 0).await?;
+        let response = self.http_call(service_uri, 0).await?;
 
         let service_node = ConsulClient::extract_nodes(service_name, response.body_json);
         Ok(service_node)
     }
 
+    /// Get the list of nodes for all services with tags matching the tag for probing
+    ///
+    /// # Arguments
+    ///
+    /// * `prev_index` - index value of last consul watch
+    /// * `tag` - tag needed on service to enable probing
+    ///
+    /// # Return
+    ///
+    /// * Result of List ServiceNode or Error
+    ///
     pub async fn list_matching_nodes(
         &mut self,
         prev_index: i64,
@@ -326,9 +429,9 @@ mod tests {
 
     #[test]
     fn check_index() {
-        assert_eq!(5, ConsulClient::check_index(1, 5));
-        assert_eq!(0, ConsulClient::check_index(5, 1));
-        assert_eq!(0, ConsulClient::check_index(1, -5));
+        assert_eq!(5, ConsulClient::get_watch_index(1, 5));
+        assert_eq!(0, ConsulClient::get_watch_index(5, 1));
+        assert_eq!(0, ConsulClient::get_watch_index(1, -5));
     }
 
     #[test]

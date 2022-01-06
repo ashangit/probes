@@ -19,6 +19,18 @@ pub struct Set {
 }
 
 impl Set {
+    /// Create a new Set command
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - the key as bytes
+    /// * `value` - the value as bytes
+    /// * `ttl` - the ttl of the item
+    ///
+    /// # Return
+    ///
+    /// * Set
+    ///
     pub fn new(key: &'static [u8], value: &'static [u8], ttl: u64) -> Set {
         let extra_field: [u8; SET_EXTRA_LEN as usize] = ttl.to_be_bytes();
 
@@ -38,6 +50,16 @@ impl Set {
 }
 
 impl Get {
+    /// Create a new Get command
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - the key as bytes
+    ///
+    /// # Return
+    ///
+    /// * Get
+    ///
     pub fn new(key: &'static [u8]) -> Get {
         let header = RequestHeader::new(GET_OPCODE, key.len() as u16, 0, 0);
         Get { header, key }
@@ -50,6 +72,7 @@ pub trait Command {
 }
 
 impl Command for Set {
+    /// Return representation of Set as bytes
     fn as_bytes(&mut self) -> Vec<u8> {
         let mut req: Vec<u8> = Vec::new();
         req.extend(self.header.as_bytes());
@@ -61,6 +84,7 @@ impl Command for Set {
 }
 
 impl Command for Get {
+    /// Return representation of Get as bytes
     fn as_bytes(&mut self) -> Vec<u8> {
         let mut req: Vec<u8> = Vec::new();
         req.extend(self.header.as_bytes());

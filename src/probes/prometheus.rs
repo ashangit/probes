@@ -31,6 +31,7 @@ lazy_static! {
     .expect("metric can be created");
 }
 
+/// Register custom prometheus metrics in the custom prometheus registry
 pub fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(NUMBER_OF_REQUESTS.clone()))
@@ -49,10 +50,24 @@ pub fn register_custom_metrics() {
         .expect("collector can be registered");
 }
 
+/// Handler of healthz endpoint
+///
+/// # Return
+///
+/// * Return ok string
+///
 async fn healthz_handler() -> Result<&'static str, StatusCode> {
     Ok("ok")
 }
 
+/// Handler of metrics endpoint
+///
+/// transform default and custom metrics to a string
+///
+/// # Return
+///
+/// * Return prometheus metrics string or https status code representing the faced issue
+///
 async fn metrics_handler() -> Result<String, StatusCode> {
     use prometheus::Encoder;
     let encoder = prometheus::TextEncoder::new();
@@ -89,6 +104,13 @@ async fn metrics_handler() -> Result<String, StatusCode> {
     Ok(res)
 }
 
+/// Initialize the webserver for healthz and metrics endpoint
+/// Used to expose prometheus metrics
+///
+/// # Arguments
+///
+/// * `http_port` - listening port of the webserver
+///
 pub async fn init_prometheus_http_endpoint(http_port: u16) {
     let app = Router::new()
         .route("/healthz", get(healthz_handler))

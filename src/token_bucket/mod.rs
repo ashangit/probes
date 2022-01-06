@@ -41,15 +41,41 @@ impl TokenBucket {
         }
     }
 
-    fn available_token_since(&mut self, elaspsed: u64) -> u64 {
-        self.capacity.min(self.available + elaspsed * self.quantum)
+    /// Return the number of available token since n seconds
+    ///
+    /// # Arguments
+    ///
+    /// * `elapsed` - number of seconds elapsed since last check
+    ///
+    /// # Return
+    ///
+    /// * Return the number of available token
+    ///
+    fn available_token_since(&mut self, elapsed: u64) -> u64 {
+        self.capacity.min(self.available + elapsed * self.quantum)
     }
 
+    /// Update available token and last time token has been consumed field
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - number of token consumed
+    ///
     fn update_counter(&mut self, token: u64) {
         self.available -= token;
         self.last = Instant::now();
     }
 
+    /// Compute the duration that need to be wait before authorizing action
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - number of token to consume
+    ///
+    /// # Return
+    ///
+    /// * Duration to wait
+    ///
     fn compute_wait_duration(&mut self, token: u64) -> Duration {
         let token_needed: u64 = token - self.available;
         let time_to_wait: f64 = token_needed as f64 / self.quantum as f64;

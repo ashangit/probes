@@ -33,6 +33,14 @@ pub struct ProbeServices {
 }
 
 impl ProbeServices {
+    /// Returns a ProbeServices
+    /// Used to manage probes of services/nodes
+    ///
+    /// # Arguments
+    ///
+    /// * `consul_client` - a consul client
+    /// * `tag` - tag needed on service to enable probing
+    ///
     pub fn new(consul_client: ConsulClient, tag: String) -> ProbeServices {
         debug!("Create a probe for services with tag {}", tag);
         ProbeServices {
@@ -42,6 +50,12 @@ impl ProbeServices {
         }
     }
 
+    /// Stop probing nodes that are not part of newly discovered nodes
+    ///
+    /// # Arguments
+    ///
+    /// * `discovered_nodes` - hash of new nodes discovered in consul with matching tag
+    ///
     fn stop_nodes_probe(&mut self, discovered_nodes: &HashMap<String, ServiceNode>) {
         let mut probe_nodes_to_stop: Vec<String> = Vec::new();
         for probe_node_key in self.probe_nodes.keys() {
@@ -61,6 +75,13 @@ impl ProbeServices {
         }
     }
 
+    /// Start probing new nodes from newly discovered nodes
+    /// Only nodes for which no probes is already running are started
+    ///
+    /// # Arguments
+    ///
+    /// * `discovered_nodes` - hash of new nodes discovered in consul with matching tag
+    ///
     fn start_nodes_probe(&mut self, discovered_nodes: &HashMap<String, ServiceNode>) {
         for discovered_node in discovered_nodes.iter() {
             let key_node = discovered_node.0.clone();
@@ -99,6 +120,8 @@ impl ProbeServices {
         }
     }
 
+    /// Manage services/nodes discovery from consul
+    /// and call for probes to stop and add
     pub async fn watch_matching_services(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

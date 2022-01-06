@@ -74,6 +74,16 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// Create a new connection to a memcached node
+    ///
+    /// # Arguments
+    ///
+    /// * `socket` - tcp stream socket
+    ///
+    /// # Return
+    ///
+    /// * Connection
+    ///
     pub fn new(socket: TcpStream) -> Connection {
         Connection {
             stream: BufWriter::new(socket),
@@ -81,6 +91,12 @@ impl Connection {
         }
     }
 
+    /// Send request to memcached node through the tcp stream
+    ///
+    /// # Arguments
+    ///
+    /// * `cmd` - memcached command to execute
+    ///
     pub async fn send_request(
         &mut self,
         mut cmd: impl Command,
@@ -90,6 +106,16 @@ impl Connection {
         Ok(())
     }
 
+    /// Get response from tcp stream
+    ///
+    /// Put data from tcp stream in a buffer
+    /// The buffer is then parse in parse_response
+    /// If not enough data to read the response read again from tcp stream
+    ///
+    /// # Return
+    ///
+    /// * Response
+    ///
     pub async fn read_response(
         &mut self,
     ) -> Result<Response, Box<dyn std::error::Error + Send + Sync>> {
@@ -110,6 +136,17 @@ impl Connection {
         }
     }
 
+    /// Parse buffer to get response
+    ///
+    /// Use a cursor on to of the buffer in order to be able to first check the buffer
+    /// and then rewind to really consume the flow of bytes from buffer
+    ///
+    /// # Return
+    ///
+    /// * response if there are enough bytes in buffer and no issue face
+    ///   or None is there are not enough bytes
+    ///   or an Other error from response header check
+    ///
     fn parse_response(&mut self) -> Result<Option<Response>, MemcachedError> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
@@ -148,19 +185,31 @@ pub struct Client {
 }
 
 impl Client {
+    /// Probe action
+    /// * issue one set
+    /// * issue one get
     pub async fn probe(&mut self) {
         self.set().await;
         self.get().await;
     }
 
+    /// Set call
     pub async fn set(&mut self) {
         self.request("set", Set::new(KEY, VALUE, TTL)).await;
     }
 
+    /// Get call
     pub async fn get(&mut self) {
         self.request("get", Get::new(KEY)).await;
     }
 
+    /// Perform memcached request
+    ///
+    /// # Arguments
+    ///
+    /// * `cmd_type` - the string represensatation of the command
+    /// * `cmd` - the memcached command to perform
+    ///
     pub async fn request(&mut self, cmd_type: &str, cmd: impl Command) {
         let start = Instant::now();
 

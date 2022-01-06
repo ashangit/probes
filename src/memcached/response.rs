@@ -11,6 +11,18 @@ pub struct Response {
 
 impl Response {
     /// Check buffer has enough bytes to process the  response
+    /// has enough bytes to process the header response
+    ///
+    /// # Arguments
+    ///
+    /// * `src` - buffer of bytes
+    ///
+    /// # Return
+    ///
+    /// * The size of bytes to read for the response
+    ///   or an incomplete error if there are not enough bytes from the buffer
+    ///   or an Other error from response header check
+    ///
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, MemcachedError> {
         let total_len = match ResponseHeader::check(src) {
             Err(issue) => {
@@ -26,7 +38,16 @@ impl Response {
 
         Ok(total_len)
     }
-
+    /// Create response from buffer of bytes
+    ///
+    /// # Arguments
+    ///
+    /// * `src` - buffer of bytes
+    ///
+    /// # Return
+    ///
+    /// * Response
+    ///
     pub fn parse(src: &mut Cursor<&[u8]>) -> Response {
         let header = ResponseHeader::parse(src);
         Response { header }
