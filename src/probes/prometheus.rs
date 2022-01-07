@@ -15,7 +15,10 @@ lazy_static! {
     )
     .expect("metric can be created");
     pub static ref RESPONSE_TIME_COLLECTOR: HistogramVec = HistogramVec::new(
-        HistogramOpts::new("response_time_seconds", "Response Times"),
+        HistogramOpts::new("response_time_seconds", "Response Times").buckets(vec![
+            0.00001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
+            2.5, 5.0, 10.0,
+        ]),
         &["cluster_name", "socket", "type"]
     )
     .expect("metric can be created");
