@@ -114,15 +114,19 @@ async fn metrics_handler() -> Result<String, StatusCode> {
 ///
 /// * `http_port` - listening port of the webserver
 ///
-pub async fn init_prometheus_http_endpoint(http_port: u16) {
+pub async fn init_prometheus_http_endpoint(
+    http_port: u16,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new()
         .route("/healthz", get(healthz_handler))
         .route("/metrics", get(metrics_handler));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], http_port));
     info!("Http server for metrics endpoint listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    match axum::Server::try_bind(&addr) {
+        Ok(server) => server.serve(app.into_make_service()).await?,
+        Err(issue) => return Err(issue.into()),
+    }
+
+    Ok(())
 }

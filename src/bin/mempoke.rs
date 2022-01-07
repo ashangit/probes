@@ -65,7 +65,12 @@ fn main() -> Result<(), i32> {
     match multi_thread_runtime_res {
         Ok(multi_thread_runtime) => {
             // Init prometheus http endpoint
-            multi_thread_runtime.spawn(init_prometheus_http_endpoint(http_port));
+            multi_thread_runtime.spawn(async move {
+                if let Err(issue) = init_prometheus_http_endpoint(http_port).await {
+                    error!("Issue to start prometheus http endpoint due to {}", issue);
+                    std::process::abort();
+                }
+            });
 
             // Init probing
             if let Err(issue) = multi_thread_runtime.block_on(init_probing(
