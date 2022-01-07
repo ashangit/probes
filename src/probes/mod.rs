@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::time::Duration;
 
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::oneshot::{Receiver, Sender};
+use tokio::time::sleep;
 use tracing::log::warn;
 use tracing::{debug, error, info};
 
@@ -20,9 +22,10 @@ pub mod prometheus;
 pub async fn init_probing(
     services_tag: String,
     consul_fqdn: String,
+    interval_check_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let consul_client = ConsulClient::new(consul_fqdn);
-    let mut probe = ProbeServices::new(consul_client, services_tag);
+    let mut probe = ProbeServices::new(consul_client, services_tag, interval_check_ms);
     probe.watch_matching_services().await?;
     Ok(())
 }
@@ -31,6 +34,7 @@ pub async fn init_probing(
 pub struct ProbeServices {
     consul_client: ConsulClient,
     tag: String,
+    interval_check_ms: u64,
     probe_nodes: HashMap<String, Sender<u8>>,
 }
 
@@ -42,12 +46,15 @@ impl ProbeServices {
     ///
     /// * `consul_client` - a consul client
     /// * `tag` - tag needed on service to enable probing
+    /// * `interval_check_ms` - interval between each check
     ///
-    pub fn new(consul_client: ConsulClient, tag: String) -> ProbeServices {
+    ///
+    pub fn new(consul_client: ConsulClient, tag: String, interval_check_ms: u64) -> ProbeServices {
         debug!("Create a probe for services with tag {}", tag);
         ProbeServices {
             consul_client,
             tag,
+            interval_check_ms,
             probe_nodes: HashMap::new(),
         }
     }
@@ -116,11 +123,13 @@ impl ProbeServices {
     ///
     /// * `service_name` - name of the memcached service
     /// * `addr` - socker of the memcached instance monitored
+    /// * `interval_check_ms` - interval between each check
     /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
     ///
     async fn start_node_probe(
         service_name: String,
         addr: String,
+        interval_check_ms: u64,
         mut stop_probe_resp_rx: Receiver<u8>,
     ) {
         let mut c_memcache = memcached::connect(service_name.clone(), addr.clone())
@@ -141,6 +150,7 @@ impl ProbeServices {
                     break;
                 }
             }
+            sleep(Duration::from_millis(interval_check_ms)).await;
         }
     }
 
@@ -164,6 +174,7 @@ impl ProbeServices {
                 tokio::spawn(ProbeServices::start_node_probe(
                     service_node.service_name.clone(),
                     format!("{}:{}", service_node.ip.clone(), service_node.port).clone(),
+                    self.interval_check_ms,
                     stop_probe_resp_rx,
                 ));
             }

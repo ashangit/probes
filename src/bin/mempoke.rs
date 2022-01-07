@@ -13,6 +13,7 @@ fn main() -> Result<(), i32> {
     let mut http_port = 8080;
     let mut services_tag = "".to_string();
     let mut tokio_console = false;
+    let mut interval_check_ms: u64 = 1000;
 
     {
         // this block limits scope of borrows by ap.refer() method
@@ -41,6 +42,11 @@ fn main() -> Result<(), i32> {
             Store,
             "Http port for metrics endpoint (default: 8080)",
         );
+        argument_parser.refer(&mut interval_check_ms).add_option(
+            &["--interval-check-ms"],
+            Store,
+            "Interval between each check (default: 1000ms)",
+        );
         argument_parser.parse_args_or_exit();
     }
 
@@ -62,9 +68,11 @@ fn main() -> Result<(), i32> {
             multi_thread_runtime.spawn(init_prometheus_http_endpoint(http_port));
 
             // Init probing
-            if let Err(issue) =
-                multi_thread_runtime.block_on(init_probing(services_tag, consul_fqdn))
-            {
+            if let Err(issue) = multi_thread_runtime.block_on(init_probing(
+                services_tag,
+                consul_fqdn,
+                interval_check_ms,
+            )) {
                 error!("Issue during node probing: {}", issue);
                 return Err(2);
             }
