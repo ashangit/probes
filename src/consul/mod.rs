@@ -16,11 +16,17 @@ pub struct ConsulClient {
     client: Client<HttpsConnector<HttpConnector>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ServiceNode {
     pub service_name: String,
     pub ip: String,
     pub port: i64,
+}
+
+impl ServiceNode {
+    pub fn get_socket(&mut self) -> String {
+        format!("{}:{}", self.ip, self.port)
+    }
 }
 
 impl fmt::Display for ServiceNode {
@@ -253,7 +259,7 @@ impl ConsulClient {
         uri_str: String,
         prev_index: i64,
     ) -> Result<HttpCall, Box<dyn std::error::Error + Send + Sync>> {
-        let query_uri = format!("{}?index={}&wait=10m", uri_str, prev_index);
+        let query_uri = format!("{}?index={}&wait=5m", uri_str, prev_index);
         debug!("Query consul: {}", query_uri);
         let uri = match query_uri.as_str().parse::<Uri>() {
             Err(issue) => {

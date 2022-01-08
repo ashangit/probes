@@ -1,10 +1,10 @@
 use std::collections::HashMap;
+
 use std::fmt::Debug;
 use std::time::Duration;
 
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::oneshot::{Receiver, Sender};
 use tokio::time::sleep;
 use tracing::log::warn;
 use tracing::{debug, error, info};
@@ -35,7 +35,7 @@ pub struct ProbeServices {
     consul_client: ConsulClient,
     tag: String,
     interval_check_ms: u64,
-    probe_nodes: HashMap<String, Sender<u8>>,
+    probe_nodes: HashMap<String, oneshot::Sender<u8>>,
 }
 
 impl ProbeServices {
@@ -89,23 +89,23 @@ impl ProbeServices {
     /// # Arguments
     ///
     /// * `service_name` - name of the memcached service
-    /// * `addr` - socker of the memcached instance monitored
+    /// * `socket` - socket of the memcached instance monitored
     ///
-    fn stop_node(service_name: String, addr: String) {
+    fn stop_node(service_name: String, socket: String) {
         FAILURE_PROBE
-            .remove_label_values(&[service_name.as_str(), addr.as_str()])
+            .remove_label_values(&[service_name.as_str(), socket.as_str()])
             .unwrap_or(());
 
         for cmd_type in ["set", "get"] {
             RESPONSE_TIME_COLLECTOR
-                .remove_label_values(&[service_name.as_str(), addr.as_str(), cmd_type])
+                .remove_label_values(&[service_name.as_str(), socket.as_str(), cmd_type])
                 .unwrap_or(());
 
             for status in STATUS_CODE.keys() {
                 NUMBER_OF_REQUESTS
                     .remove_label_values(&[
                         service_name.as_str(),
-                        addr.as_str(),
+                        socket.as_str(),
                         STATUS_CODE.get(status).unwrap(),
                         cmd_type,
                     ])
@@ -127,30 +127,58 @@ impl ProbeServices {
     /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
     ///
     async fn start_node_probe(
-        service_name: String,
-        addr: String,
+        mut service_node: ServiceNode,
         interval_check_ms: u64,
-        mut stop_probe_resp_rx: Receiver<u8>,
+        mut stop_probe_resp_rx: oneshot::Receiver<u8>,
     ) {
-        let mut c_memcache = memcached::connect(service_name.clone(), addr.clone())
-            .await
-            .unwrap();
+        // TODO manage failure connect which leads to probe in the lst while not probing
         loop {
-            match stop_probe_resp_rx.try_recv() {
-                Ok(_) => {
-                    ProbeServices::stop_node(service_name, addr);
-                    break;
-                }
-                Err(TryRecvError::Empty) => {
-                    c_memcache.probe().await;
-                    // TODO manage failure like connection break to be able to recreate connection stop + send message to main process
-                }
-                Err(TryRecvError::Closed) => {
-                    ProbeServices::stop_node(service_name, addr);
-                    break;
+            match memcached::connect(service_node.service_name.clone(), service_node.get_socket())
+                .await
+            {
+                Ok(mut c_memcache) => loop {
+                    match stop_probe_resp_rx.try_recv() {
+                        Ok(_) | Err(TryRecvError::Closed) => {
+                            ProbeServices::stop_node(
+                                service_node.service_name.clone(),
+                                service_node.get_socket(),
+                            );
+                            return;
+                        }
+                        Err(TryRecvError::Empty) => {
+                            if let Err(issue) = c_memcache.probe().await {
+                                FAILURE_PROBE
+                                    .with_label_values(&[
+                                        service_node.service_name.clone().as_str(),
+                                        service_node.get_socket().as_str(),
+                                    ])
+                                    .inc();
+                                error!(
+                                    "Failed to probe {} due to {}",
+                                    service_node.to_string(),
+                                    issue
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    sleep(Duration::from_millis(interval_check_ms)).await;
+                },
+                Err(issue) => {
+                    FAILURE_PROBE
+                        .with_label_values(&[
+                            service_node.service_name.clone().as_str(),
+                            service_node.get_socket().as_str(),
+                        ])
+                        .inc();
+                    error!(
+                        "Failed to connect to {} due to {}",
+                        service_node.to_string(),
+                        issue
+                    );
+                    sleep(Duration::from_millis(500)).await;
                 }
             }
-            sleep(Duration::from_millis(interval_check_ms)).await;
         }
     }
 
@@ -172,8 +200,7 @@ impl ProbeServices {
                 self.probe_nodes.insert(key_node, stop_probe_resp_tx);
 
                 tokio::spawn(ProbeServices::start_node_probe(
-                    service_node.service_name.clone(),
-                    format!("{}:{}", service_node.ip.clone(), service_node.port).clone(),
+                    (*service_node).clone(),
                     self.interval_check_ms,
                     stop_probe_resp_rx,
                 ));
@@ -186,7 +213,7 @@ impl ProbeServices {
     pub async fn watch_matching_services(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut token_bucket = TokenBucket::new(60, 1);
+        let mut token_bucket = TokenBucket::new(180, 1);
         let mut index = 0;
 
         loop {

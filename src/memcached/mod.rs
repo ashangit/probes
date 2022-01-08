@@ -9,11 +9,10 @@ use bytes::{Buf, BytesMut};
 use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use tracing::error;
 
 use crate::memcached::command::{Command, Get, Set};
 use crate::memcached::response::Response;
-use crate::probes::prometheus::{FAILURE_PROBE, NUMBER_OF_REQUESTS, RESPONSE_TIME_COLLECTOR};
+use crate::probes::prometheus::{NUMBER_OF_REQUESTS, RESPONSE_TIME_COLLECTOR};
 
 mod command;
 mod header;
@@ -22,6 +21,20 @@ mod response;
 const KEY: &[u8] = "mempoke_key".as_bytes();
 const VALUE: &[u8] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
 const TTL: u64 = 300;
+
+lazy_static! {
+    pub static ref STATUS_CODE: HashMap<u16, &'static str> = HashMap::from([
+        (0, "NoError"),
+        (1, "KeyNotFound"),
+        (2, "KeyExists"),
+        (3, "ValueTooLarge"),
+        (4, "InvalidArguments"),
+        (5, "ItemNotStored"),
+        (6, "IncrDecrOnNonNumericValue"),
+        (129, "UnknownCommand"),
+        (130, "OutOfMemory"),
+    ]);
+}
 
 #[derive(Debug, PartialEq)]
 pub struct MemcachedError(MemcachedErrorKind);
@@ -164,20 +177,6 @@ impl Connection {
     }
 }
 
-lazy_static! {
-    pub static ref STATUS_CODE: HashMap<u16, &'static str> = HashMap::from([
-        (0, "NoError"),
-        (1, "KeyNotFound"),
-        (2, "KeyExists"),
-        (3, "ValueTooLarge"),
-        (4, "InvalidArguments"),
-        (5, "ItemNotStored"),
-        (6, "IncrDecrOnNonNumericValue"),
-        (129, "UnknownCommand"),
-        (130, "OutOfMemory"),
-    ]);
-}
-
 pub struct Client {
     cluster_name: String,
     addr: String,
@@ -188,19 +187,19 @@ impl Client {
     /// Probe action
     /// * issue one set
     /// * issue one get
-    pub async fn probe(&mut self) {
-        self.set().await;
-        self.get().await;
+    pub async fn probe(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.set().await?;
+        self.get().await
     }
 
     /// Set call
-    pub async fn set(&mut self) {
-        self.request("set", Set::new(KEY, VALUE, TTL)).await;
+    pub async fn set(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.request("set", Set::new(KEY, VALUE, TTL)).await
     }
 
     /// Get call
-    pub async fn get(&mut self) {
-        self.request("get", Get::new(KEY)).await;
+    pub async fn get(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.request("get", Get::new(KEY)).await
     }
 
     /// Perform memcached request
@@ -210,26 +209,23 @@ impl Client {
     /// * `cmd_type` - the string represensatation of the command
     /// * `cmd` - the memcached command to perform
     ///
-    pub async fn request(&mut self, cmd_type: &str, cmd: impl Command) {
+    pub async fn request(
+        &mut self,
+        cmd_type: &str,
+        cmd: impl Command,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
 
         match self.connection.send_request(cmd).await {
             Ok(_) => {}
             Err(issue) => {
-                FAILURE_PROBE
-                    .with_label_values(&[self.cluster_name.as_str(), self.addr.as_str()])
-                    .inc();
-                error!("Failed send request to {}: {}", self.addr, issue);
-                return;
+                return Err(format!("Failed send request to {}: {}", self.addr, issue).into())
             }
         }
 
         match self.connection.read_response().await {
             Err(issue) => {
-                FAILURE_PROBE
-                    .with_label_values(&[self.cluster_name.as_str(), self.addr.as_str()])
-                    .inc();
-                error!("Failed read response from {}: {}", self.addr, issue);
+                return Err(format!("Failed read response from {}: {}", self.addr, issue).into());
             }
             Ok(result) => {
                 //debug!("{}", resp.header.status.get_u16());
@@ -247,5 +243,7 @@ impl Client {
                     .observe(start.elapsed().as_secs_f64());
             }
         }
+
+        Ok(())
     }
 }
