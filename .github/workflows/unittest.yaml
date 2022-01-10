@@ -5,7 +5,9 @@ jobs:
     name: Publish artifacts
     runs-on: ubuntu-latest
     steps:
-    - uses: raftario/setup-rust-action@v1
-    - uses: actions/checkout@v2
-    - name: Build
+    - name: Rust
+      uses: raftario/setup-rust-action@v1
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Test
       run: make test
