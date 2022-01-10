@@ -21,8 +21,12 @@ lint: install-deps
 	cargo clippy --fix --allow-dirty --allow-staged
 
 .PHONY: build
-build: test
+build:
 	 RUSTFLAGS="--cfg tokio_unstable" cargo build --release
+
+.PHONY: docker-build
+docker-build:
+	docker build . --network=host -t probes:latest -f Dockerfile --rm --pull
 
 .PHONY: test
 test: install-deps
