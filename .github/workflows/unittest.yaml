@@ -2,7 +2,7 @@ name: Test
 on: [push, pull_request]
 jobs:
   test:
-    name: Publish artifacts
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
     - name: Rust
