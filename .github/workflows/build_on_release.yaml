@@ -7,12 +7,19 @@ jobs:
     name: Publish artifacts
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Rust
         uses: raftario/setup-rust-action@v1
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Directories
-        run: mkdir -p output/build-${GITHUB_REF#refs/*/}/bin
       - name: Build
         run: make build
       - name: Release

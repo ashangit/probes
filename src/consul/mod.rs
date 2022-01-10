@@ -372,6 +372,16 @@ mod tests {
     use crate::consul::{ConsulClient, ServiceNode};
 
     #[test]
+    fn service_node_to_string() {
+        let node = ServiceNode {
+            service_name: "service_name".to_string(),
+            ip: "0.0.0.0".to_string(),
+            port: 12500,
+        };
+        assert_eq!("service_name:0.0.0.0:12500".to_string(), node.to_string());
+    }
+
+    #[test]
     fn get_string_value() {
         assert_eq!(
             "test".to_string(),
@@ -428,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn check_index() {
+    fn get_watch_index() {
         assert_eq!(5, ConsulClient::get_watch_index(1, 5));
         assert_eq!(0, ConsulClient::get_watch_index(5, 1));
         assert_eq!(0, ConsulClient::get_watch_index(1, -5));

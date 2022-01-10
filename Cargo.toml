@@ -27,7 +27,9 @@ tracing-futures = "0.2"
 # Other
 argparse = "0.2.2"
 serde_json = "1.0"
-hex = "0.4.3"
+hex = "0.4"
 bytes = "1"
 # Debug
-console-subscriber = "0.1.0"
+console-subscriber = "0.1"
+# Test
+mockall = "0.11"
