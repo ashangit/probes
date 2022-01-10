@@ -228,7 +228,6 @@ impl Client {
                 return Err(format!("Failed read response from {}: {}", self.addr, issue).into());
             }
             Ok(result) => {
-                //debug!("{}", resp.header.status.get_u16());
                 NUMBER_OF_REQUESTS
                     .with_label_values(&[
                         self.cluster_name.as_str(),

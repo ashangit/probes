@@ -1,0 +1,11 @@
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    name: Publish artifacts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: raftario/setup-rust-action@v1
+    - uses: actions/checkout@v2
+    - name: Build
+      run: make test
