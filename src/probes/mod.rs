@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -114,6 +113,20 @@ impl ProbeServices {
         }
     }
 
+    fn fail_probe(mut service_node: ServiceNode, issue: Box<dyn std::error::Error + Send + Sync>) {
+        FAILURE_PROBE
+            .with_label_values(&[
+                service_node.service_name.clone().as_str(),
+                service_node.get_socket().as_str(),
+            ])
+            .inc();
+        error!(
+            "Failed to probe {} due to {}",
+            service_node.to_string(),
+            issue
+        );
+    }
+
     /// The memcached probe
     /// Manage connection to the memcached
     /// Check if any message have been send on the stop_probe_resp channel
@@ -122,7 +135,6 @@ impl ProbeServices {
     /// # Arguments
     ///
     /// * `service_name` - name of the memcached service
-    /// * `addr` - socker of the memcached instance monitored
     /// * `interval_check_ms` - interval between each check
     /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
     ///
@@ -131,7 +143,6 @@ impl ProbeServices {
         interval_check_ms: u64,
         mut stop_probe_resp_rx: oneshot::Receiver<u8>,
     ) {
-        // TODO manage failure connect which leads to probe in the lst while not probing
         loop {
             match memcached::connect(service_node.service_name.clone(), service_node.get_socket())
                 .await
@@ -147,17 +158,7 @@ impl ProbeServices {
                         }
                         Err(TryRecvError::Empty) => {
                             if let Err(issue) = c_memcache.probe().await {
-                                FAILURE_PROBE
-                                    .with_label_values(&[
-                                        service_node.service_name.clone().as_str(),
-                                        service_node.get_socket().as_str(),
-                                    ])
-                                    .inc();
-                                error!(
-                                    "Failed to probe {} due to {}",
-                                    service_node.to_string(),
-                                    issue
-                                );
+                                ProbeServices::fail_probe(service_node.clone(), issue);
                                 break;
                             }
                         }
@@ -165,17 +166,7 @@ impl ProbeServices {
                     sleep(Duration::from_millis(interval_check_ms)).await;
                 },
                 Err(issue) => {
-                    FAILURE_PROBE
-                        .with_label_values(&[
-                            service_node.service_name.clone().as_str(),
-                            service_node.get_socket().as_str(),
-                        ])
-                        .inc();
-                    error!(
-                        "Failed to connect to {} due to {}",
-                        service_node.to_string(),
-                        issue
-                    );
+                    ProbeServices::fail_probe(service_node.clone(), issue);
                     sleep(Duration::from_millis(500)).await;
                 }
             }
