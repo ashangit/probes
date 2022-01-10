@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -27,6 +28,106 @@ pub async fn init_probing(
     let mut probe = ProbeServices::new(consul_client, services_tag, interval_check_ms);
     probe.watch_matching_services().await?;
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct ProbeNode {
+    cluster_name: String,
+    ip: String,
+    port: u16,
+    socket: String,
+}
+
+impl ProbeNode {
+    fn new(cluster_name: String, ip: String, port: u16) -> ProbeNode {
+        ProbeNode {
+            cluster_name,
+            ip: ip.clone(),
+            port,
+            socket: format!("{}:{}", ip, port),
+        }
+    }
+
+    /// Remove all prometheus metrics of that memcached node
+    ///
+    fn stop(&mut self) {
+        FAILURE_PROBE
+            .remove_label_values(&[self.cluster_name.as_str(), self.socket.as_str()])
+            .unwrap_or(());
+
+        for cmd_type in ["set", "get"] {
+            RESPONSE_TIME_COLLECTOR
+                .remove_label_values(&[self.cluster_name.as_str(), self.socket.as_str(), cmd_type])
+                .unwrap_or(());
+
+            for status in STATUS_CODE.keys() {
+                NUMBER_OF_REQUESTS
+                    .remove_label_values(&[
+                        self.cluster_name.as_str(),
+                        self.socket.as_str(),
+                        STATUS_CODE.get(status).unwrap(),
+                        cmd_type,
+                    ])
+                    .unwrap_or(());
+            }
+        }
+    }
+
+    fn manage_failure(&mut self, issue: Box<dyn std::error::Error + Send + Sync>) {
+        FAILURE_PROBE
+            .with_label_values(&[self.cluster_name.clone().as_str(), self.socket.as_str()])
+            .inc();
+        error!("Failed to probe {} due to {}", self.to_string(), issue);
+    }
+
+    /// The memcached probe
+    /// Manage connection to the memcached
+    /// Check if any message have been send on the stop_probe_resp channel
+    /// If it is the case remove all related prometheus metrics and break the probe loop
+    ///
+    /// # Arguments
+    ///
+    /// * `interval_check_ms` - interval between each check
+    /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
+    ///
+    async fn start(
+        &mut self,
+        interval_check_ms: u64,
+        mut stop_probe_resp_rx: oneshot::Receiver<u8>,
+    ) {
+        loop {
+            match memcached::connect(self.cluster_name.clone(), self.socket.clone()).await {
+                Ok(mut c_memcache) => loop {
+                    match stop_probe_resp_rx.try_recv() {
+                        Ok(_) | Err(TryRecvError::Closed) => {
+                            return self.stop();
+                        }
+                        Err(TryRecvError::Empty) => {
+                            if let Err(issue) = c_memcache.probe().await {
+                                self.manage_failure(issue);
+                                break;
+                            }
+                        }
+                    }
+                    sleep(Duration::from_millis(interval_check_ms)).await;
+                },
+                Err(issue) => {
+                    self.manage_failure(issue);
+                }
+            }
+            sleep(Duration::from_millis(500)).await;
+        }
+    }
+}
+
+impl fmt::Display for ProbeNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            format!("{}:{}:{}", self.cluster_name, self.ip, self.port)
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -83,94 +184,18 @@ impl ProbeServices {
         }
     }
 
-    /// Remove all prometheus metrics of that memcached node
-    ///
-    /// # Arguments
-    ///
-    /// * `service_name` - name of the memcached service
-    /// * `socket` - socket of the memcached instance monitored
-    ///
-    fn stop_node(service_name: String, socket: String) {
-        FAILURE_PROBE
-            .remove_label_values(&[service_name.as_str(), socket.as_str()])
-            .unwrap_or(());
-
-        for cmd_type in ["set", "get"] {
-            RESPONSE_TIME_COLLECTOR
-                .remove_label_values(&[service_name.as_str(), socket.as_str(), cmd_type])
-                .unwrap_or(());
-
-            for status in STATUS_CODE.keys() {
-                NUMBER_OF_REQUESTS
-                    .remove_label_values(&[
-                        service_name.as_str(),
-                        socket.as_str(),
-                        STATUS_CODE.get(status).unwrap(),
-                        cmd_type,
-                    ])
-                    .unwrap_or(());
-            }
-        }
-    }
-
-    fn fail_probe(mut service_node: ServiceNode, issue: Box<dyn std::error::Error + Send + Sync>) {
-        FAILURE_PROBE
-            .with_label_values(&[
-                service_node.service_name.clone().as_str(),
-                service_node.get_socket().as_str(),
-            ])
-            .inc();
-        error!(
-            "Failed to probe {} due to {}",
-            service_node.to_string(),
-            issue
-        );
-    }
-
-    /// The memcached probe
-    /// Manage connection to the memcached
-    /// Check if any message have been send on the stop_probe_resp channel
-    /// If it is the case remove all related prometheus metrics and break the probe loop
-    ///
-    /// # Arguments
-    ///
-    /// * `service_name` - name of the memcached service
-    /// * `interval_check_ms` - interval between each check
-    /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
-    ///
     async fn start_node_probe(
-        mut service_node: ServiceNode,
+        service_node: ServiceNode,
         interval_check_ms: u64,
-        mut stop_probe_resp_rx: oneshot::Receiver<u8>,
+        stop_probe_resp_rx: oneshot::Receiver<u8>,
     ) {
-        loop {
-            match memcached::connect(service_node.service_name.clone(), service_node.get_socket())
-                .await
-            {
-                Ok(mut c_memcache) => loop {
-                    match stop_probe_resp_rx.try_recv() {
-                        Ok(_) | Err(TryRecvError::Closed) => {
-                            ProbeServices::stop_node(
-                                service_node.service_name.clone(),
-                                service_node.get_socket(),
-                            );
-                            return;
-                        }
-                        Err(TryRecvError::Empty) => {
-                            if let Err(issue) = c_memcache.probe().await {
-                                ProbeServices::fail_probe(service_node.clone(), issue);
-                                break;
-                            }
-                        }
-                    }
-                    sleep(Duration::from_millis(interval_check_ms)).await;
-                },
-                Err(issue) => {
-                    ProbeServices::fail_probe(service_node.clone(), issue);
-                    sleep(Duration::from_millis(500)).await;
-                }
-            }
-        }
+        ProbeNode::new(
+            service_node.service_name.clone(),
+            service_node.ip.clone(),
+            service_node.port,
+        )
+        .start(interval_check_ms, stop_probe_resp_rx)
+        .await;
     }
 
     /// Start probing new nodes from newly discovered nodes

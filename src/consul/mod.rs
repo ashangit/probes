@@ -20,13 +20,7 @@ pub struct ConsulClient {
 pub struct ServiceNode {
     pub service_name: String,
     pub ip: String,
-    pub port: i64,
-}
-
-impl ServiceNode {
-    pub fn get_socket(&mut self) -> String {
-        format!("{}:{}", self.ip, self.port)
-    }
+    pub port: u16,
 }
 
 impl fmt::Display for ServiceNode {
@@ -171,7 +165,7 @@ impl ConsulClient {
             .as_str()
             .unwrap()
             .to_string();
-        let service_port = node.get("ServicePort").unwrap().as_i64().unwrap();
+        let service_port: u16 = node.get("ServicePort").unwrap().as_u64().unwrap() as u16;
 
         ServiceNode {
             service_name,
