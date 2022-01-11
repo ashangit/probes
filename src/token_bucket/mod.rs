@@ -83,17 +83,10 @@ impl TokenBucket {
         Duration::from_secs_f64(time_to_wait)
     }
 
-    /// Wait for the number of requested token in the bucket token
-    ///
-    /// If the bucket token has already enough token don't wait
-    ///
-    /// # Arguments
-    ///
-    /// * `token` - Number of token requested
-    pub async fn wait_for(
+    fn need_to_wait(
         &mut self,
         token: u64,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         if self.capacity < token {
             error!(
                 "Requested token is bigger than max capacity {} < {}",
@@ -108,7 +101,7 @@ impl TokenBucket {
         }
 
         if token == 0 {
-            return Ok(());
+            return Ok(false);
         }
 
         // Update number of available token from time elapsed since last time max by the capacity
@@ -120,14 +113,33 @@ impl TokenBucket {
                 self.available, token
             );
             self.update_counter(token);
-            return Ok(());
+            return Ok(false);
         }
+        Ok(true)
+    }
 
-        sleep(self.compute_wait_duration(token)).await;
+    /// Wait for the number of requested token in the bucket token
+    ///
+    /// If the bucket token has already enough token don't wait
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - Number of token requested
+    pub async fn wait_for(
+        &mut self,
+        token: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        match self.need_to_wait(token) {
+            Ok(true) => {
+                sleep(self.compute_wait_duration(token)).await;
 
-        // Reset available and last time
-        self.available = 0;
-        self.last = Instant::now();
+                // Reset available and last time
+                self.available = 0;
+                self.last = Instant::now();
+            }
+            Ok(false) => {}
+            Err(issue) => return Err(issue),
+        }
         Ok(())
     }
 }
@@ -165,6 +177,29 @@ mod tests {
         assert_eq!(
             token_bucket.compute_wait_duration(5),
             Duration::from_secs_f64(5.00)
+        );
+    }
+
+    #[test]
+    fn need_wait() {
+        let mut token_bucket = TokenBucket::new(10, 1);
+
+        assert!(!token_bucket.need_to_wait(1).unwrap());
+        assert!(token_bucket.need_to_wait(10).unwrap());
+        //assert!(token_bucket.need_wait(100).unwrap());
+
+        token_bucket.available = 0;
+        assert!(!token_bucket.need_to_wait(0).unwrap());
+    }
+
+    #[test]
+    fn need_wait_bigger_than_max_capa() {
+        let mut token_bucket = TokenBucket::new(10, 1);
+        assert!(token_bucket.need_to_wait(100).is_err());
+        assert_eq!(
+            "Number of requested token (100) is greater than the capacity (10) of the token bucket"
+                .to_string(),
+            token_bucket.need_to_wait(100).err().unwrap().to_string()
         );
     }
 }
