@@ -100,6 +100,11 @@ impl ProbeNode {
                 Ok(mut c_memcache) => loop {
                     match stop_probe_resp_rx.try_recv() {
                         Ok(_) | Err(TryRecvError::Closed) => {
+                            info!(
+                                "Stop to probe node: {}:{}",
+                                self.cluster_name.clone(),
+                                self.socket.clone()
+                            );
                             return self.stop();
                         }
                         Err(TryRecvError::Empty) => {
@@ -115,7 +120,19 @@ impl ProbeNode {
                     self.manage_failure(issue);
                 }
             }
-            sleep(Duration::from_millis(500)).await;
+            match stop_probe_resp_rx.try_recv() {
+                Ok(_) | Err(TryRecvError::Closed) => {
+                    info!(
+                        "Stop to probe node: {}:{}",
+                        self.cluster_name.clone(),
+                        self.socket.clone()
+                    );
+                    return self.stop();
+                }
+                Err(TryRecvError::Empty) => {
+                    sleep(Duration::from_millis(500)).await;
+                }
+            }
         }
     }
 }
@@ -174,7 +191,7 @@ impl ProbeServices {
         }
 
         for probe_node_to_stop in probe_nodes_to_stop.iter() {
-            info!("Stop to probe node: {}", probe_node_to_stop);
+            info!("Request to stop to probe node: {}", probe_node_to_stop);
             match self.probe_nodes.remove(probe_node_to_stop) {
                 Some(stop_probe_resp_tx) => {
                     stop_probe_resp_tx.send(1).unwrap_or(());
