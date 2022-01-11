@@ -130,3 +130,32 @@ pub async fn init_prometheus_http_endpoint(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::probes::prometheus::NUMBER_OF_REQUESTS;
+    use crate::probes::prometheus::{healthz_handler, metrics_handler, register_custom_metrics};
+
+    #[tokio::test]
+    async fn test_healthz_handler() {
+        assert_eq!("ok", healthz_handler().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler() {
+        register_custom_metrics();
+        NUMBER_OF_REQUESTS
+            .with_label_values(&["cluster_name", "addr", "status_code", "get"])
+            .inc();
+        NUMBER_OF_REQUESTS
+            .with_label_values(&["cluster_name", "addr", "status_code", "get"])
+            .inc();
+        NUMBER_OF_REQUESTS
+            .with_label_values(&["cluster_name", "addr", "status_code", "set"])
+            .inc();
+        let metrics = metrics_handler().await.unwrap();
+        assert!(metrics.contains("process_cpu_seconds_total"));
+        assert!(metrics.contains("number_of_requests{cluster_name=\"cluster_name\",socket=\"addr\",status=\"status_code\",type=\"get\"} 2"));
+        assert!(metrics.contains("number_of_requests{cluster_name=\"cluster_name\",socket=\"addr\",status=\"status_code\",type=\"set\"} 1"));
+    }
+}
