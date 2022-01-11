@@ -32,4 +32,6 @@ bytes = "1"
 # Debug
 console-subscriber = "0.1"
 # Test
-mockall = "0.11"
+tokio-test = "0.4"
+wiremock = "0.5"
+#mockall = "0.11"

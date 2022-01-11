@@ -33,6 +33,7 @@ impl fmt::Display for ServiceNode {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct ServiceNodes {
     pub index: i64,
     pub nodes: HashMap<String, ServiceNode>,
@@ -368,8 +369,11 @@ impl ConsulClient {
 #[cfg(test)]
 mod tests {
     use serde_json::Value;
+    use std::collections::HashMap;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::consul::{ConsulClient, ServiceNode};
+    use crate::consul::{ConsulClient, ServiceNode, ServiceNodes};
 
     #[test]
     fn service_node_to_string() {
@@ -491,5 +495,106 @@ mod tests {
             empty,
             ConsulClient::extract_nodes("service_test".to_string(), nodes_value)
         );
+    }
+
+    async fn init_consul_client() -> ConsulClient {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/v1/catalog/services"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(
+                        "{\"other\":[\"net\",\"4578\"], \"memcached-1\":[\"memcached\",\"4578\"]}",
+                    )
+                    .insert_header("x-consul-index", "110"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/v1/catalog/service/memcached-1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(
+                    "[{\"ServiceAddress\":\"1.2.2.15\",\"ServicePort\":11213},{\"ServiceAddress\":\"1.2.2.16\",\"ServicePort\":11213}]",
+                ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/v1/catalog/service/service_name_non_parsable_json"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(
+                    "[{\"ServiceAddress\":\"1.2.2.15\",\"ServicePort\":11213},{\"ServiceAddress\":\"1.2.2.16\",\"ServicePort\":11213]",
+                ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        return ConsulClient::new((&mock_server.uri()).to_string());
+    }
+
+    #[tokio::test]
+    async fn list_nodes_for_service() {
+        let mut consul_client = init_consul_client().await;
+
+        let res = consul_client
+            .list_nodes_for_service("memcached-1".to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            vec![
+                ServiceNode {
+                    service_name: "memcached-1".to_string(),
+                    ip: "1.2.2.15".to_string(),
+                    port: 11213
+                },
+                ServiceNode {
+                    service_name: "memcached-1".to_string(),
+                    ip: "1.2.2.16".to_string(),
+                    port: 11213
+                }
+            ],
+            res
+        );
+
+        let res = consul_client
+            .list_nodes_for_service("service_name_non_parsable_json".to_string())
+            .await
+            .unwrap();
+
+        let res_vec: Vec<ServiceNode> = Vec::new();
+        assert_eq!(res_vec, res);
+    }
+
+    #[tokio::test]
+    async fn list_matching_nodes() {
+        let mut consul_client = init_consul_client().await;
+        let res = consul_client
+            .list_matching_nodes(1, "memcached".to_string())
+            .await
+            .unwrap();
+
+        let nodes = HashMap::from([
+            (
+                "memcached-1:1.2.2.15:11213".to_string(),
+                ServiceNode {
+                    service_name: "memcached-1".to_string(),
+                    ip: "1.2.2.15".to_string(),
+                    port: 11213,
+                },
+            ),
+            (
+                "memcached-1:1.2.2.16:11213".to_string(),
+                ServiceNode {
+                    service_name: "memcached-1".to_string(),
+                    ip: "1.2.2.16".to_string(),
+                    port: 11213,
+                },
+            ),
+        ]);
+        assert_eq!(ServiceNodes { index: 110, nodes }, res);
     }
 }
