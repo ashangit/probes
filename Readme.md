@@ -1,3 +1,5 @@
+[![Test](https://github.com/ashangit/probes/actions/workflows/unittest.yaml/badge.svg?branch=master)](https://github.com/ashangit/probes/actions/workflows/unittest.yaml)
+
 # TODO
 - do some bench + add some integration tests
 - using multiplexing to send multiple request on the same host even if no response from previous?
