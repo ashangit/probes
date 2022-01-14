@@ -7,6 +7,10 @@ jobs:
     name: Publish artifacts
     runs-on: ubuntu-latest
     steps:
+      - name: Rust
+        uses: raftario/setup-rust-action@v1
+      - name: Checkout
+        uses: actions/checkout@v2
       - uses: actions/cache@v2
         with:
           path: |
@@ -16,10 +20,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Rust
-        uses: raftario/setup-rust-action@v1
-      - name: Checkout
-        uses: actions/checkout@v2
       - name: Build
         run: make build
       - name: Release
