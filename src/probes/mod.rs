@@ -36,15 +36,25 @@ pub struct ProbeNode {
     ip: String,
     port: u16,
     socket: String,
+    interval_check_ms: u64,
+    stop_probe_resp_rx: oneshot::Receiver<u8>,
 }
 
 impl ProbeNode {
-    fn new(cluster_name: String, ip: String, port: u16) -> ProbeNode {
+    fn new(
+        cluster_name: String,
+        ip: String,
+        port: u16,
+        interval_check_ms: u64,
+        stop_probe_resp_rx: oneshot::Receiver<u8>,
+    ) -> ProbeNode {
         ProbeNode {
             cluster_name,
             ip: ip.clone(),
             port,
             socket: format!("{}:{}", ip, port),
+            interval_check_ms,
+            stop_probe_resp_rx,
         }
     }
 
@@ -90,15 +100,11 @@ impl ProbeNode {
     /// * `interval_check_ms` - interval between each check
     /// * `stop_probe_resp_rx` - receiver for stop probe channel dedicated to that probe
     ///
-    async fn start(
-        &mut self,
-        interval_check_ms: u64,
-        mut stop_probe_resp_rx: oneshot::Receiver<u8>,
-    ) {
+    async fn start(&mut self) {
         loop {
             match memcached::connect(self.cluster_name.clone(), self.socket.clone()).await {
                 Ok(mut c_memcache) => loop {
-                    match stop_probe_resp_rx.try_recv() {
+                    match self.stop_probe_resp_rx.try_recv() {
                         Ok(_) | Err(TryRecvError::Closed) => {
                             info!(
                                 "Stop to probe node: {}:{}",
@@ -114,13 +120,13 @@ impl ProbeNode {
                             }
                         }
                     }
-                    sleep(Duration::from_millis(interval_check_ms)).await;
+                    sleep(Duration::from_millis(self.interval_check_ms)).await;
                 },
                 Err(issue) => {
                     self.manage_failure(issue);
                 }
             }
-            match stop_probe_resp_rx.try_recv() {
+            match self.stop_probe_resp_rx.try_recv() {
                 Ok(_) | Err(TryRecvError::Closed) => {
                     info!(
                         "Stop to probe node: {}:{}",
@@ -139,11 +145,7 @@ impl ProbeNode {
 
 impl fmt::Display for ProbeNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!("{}:{}:{}", self.cluster_name, self.ip, self.port)
-        )
+        write!(f, "{}:{}:{}", self.cluster_name, self.ip, self.port)
     }
 }
 
@@ -210,8 +212,10 @@ impl ProbeServices {
             service_node.service_name.clone(),
             service_node.ip.clone(),
             service_node.port,
+            interval_check_ms,
+            stop_probe_resp_rx,
         )
-        .start(interval_check_ms, stop_probe_resp_rx)
+        .start()
         .await;
     }
 
@@ -271,5 +275,80 @@ impl ProbeServices {
                 }
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::sync::oneshot;
+    use tokio::sync::oneshot::Sender;
+
+    use crate::probes::prometheus::register_custom_metrics;
+    use crate::probes::prometheus::{FAILURE_PROBE, NUMBER_OF_REQUESTS};
+    use crate::probes::ProbeNode;
+
+    fn return_error() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Err("issue".into())
+    }
+
+    fn get_probe() -> (ProbeNode, Sender<u8>) {
+        let (stop_probe_resp_tx, stop_probe_resp_rx) = oneshot::channel();
+
+        (
+            ProbeNode::new(
+                "cluster_name".to_string(),
+                "ip".to_string(),
+                0,
+                1,
+                stop_probe_resp_rx,
+            ),
+            stop_probe_resp_tx,
+        )
+    }
+
+    #[test]
+    fn probe_node_stop() {
+        register_custom_metrics();
+        NUMBER_OF_REQUESTS
+            .with_label_values(&["cluster_name", "ip:0", "NoError", "get"])
+            .inc();
+
+        assert_eq!(
+            1,
+            NUMBER_OF_REQUESTS
+                .get_metric_with_label_values(&["cluster_name", "ip:0", "NoError", "get",])
+                .unwrap()
+                .get()
+        );
+
+        get_probe().0.stop();
+
+        assert_eq!(
+            0,
+            NUMBER_OF_REQUESTS
+                .get_metric_with_label_values(&["cluster_name", "ip:0", "NoError", "get"])
+                .unwrap()
+                .get()
+        );
+    }
+
+    #[test]
+    fn probe_manage_failure() {
+        assert_eq!(
+            0,
+            FAILURE_PROBE
+                .get_metric_with_label_values(&["cluster_name", "ip:0"])
+                .unwrap()
+                .get()
+        );
+        get_probe().0.manage_failure(return_error().err().unwrap());
+
+        assert_eq!(
+            1,
+            FAILURE_PROBE
+                .get_metric_with_label_values(&["cluster_name", "ip:0"])
+                .unwrap()
+                .get()
+        );
     }
 }

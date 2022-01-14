@@ -3,7 +3,7 @@ use std::fmt;
 
 use hyper::client::HttpConnector;
 use hyper::{Client, Uri};
-use hyper_tls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use serde_json::{Map, Value};
 use tracing::log::warn;
 use tracing::{debug, error};
@@ -25,11 +25,7 @@ pub struct ServiceNode {
 
 impl fmt::Display for ServiceNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!("{}:{}:{}", self.service_name, self.ip, self.port)
-        )
+        write!(f, "{}:{}:{}", self.service_name, self.ip, self.port)
     }
 }
 
@@ -60,7 +56,11 @@ impl ConsulClient {
     /// ```
     pub fn new(consul_fqdn: String) -> ConsulClient {
         debug!("Create consul client {}", consul_fqdn);
-        let https = HttpsConnector::new();
+        let https = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_or_http()
+            .enable_http1()
+            .build();
 
         ConsulClient {
             fqdn: consul_fqdn,
@@ -368,8 +368,9 @@ impl ConsulClient {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
     use std::collections::HashMap;
+
+    use serde_json::Value;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -532,7 +533,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        return ConsulClient::new((&mock_server.uri()).to_string());
+        ConsulClient::new((&mock_server.uri()).to_string())
     }
 
     #[tokio::test]

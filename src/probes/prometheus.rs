@@ -134,7 +134,7 @@ pub async fn init_prometheus_http_endpoint(
 #[cfg(test)]
 mod tests {
     use crate::probes::prometheus::NUMBER_OF_REQUESTS;
-    use crate::probes::prometheus::{healthz_handler, metrics_handler, register_custom_metrics};
+    use crate::probes::prometheus::{healthz_handler, metrics_handler};
 
     #[tokio::test]
     async fn test_healthz_handler() {
@@ -143,7 +143,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_handler() {
-        register_custom_metrics();
         NUMBER_OF_REQUESTS
             .with_label_values(&["cluster_name", "addr", "status_code", "get"])
             .inc();
