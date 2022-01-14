@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
 use std::io::Cursor;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytes::{Buf, BytesMut};
 use lazy_static::lazy_static;
@@ -21,6 +21,8 @@ mod response;
 const KEY: &[u8] = "mempoke_key".as_bytes();
 const VALUE: &[u8] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
 const TTL: u64 = 300;
+
+const TIMEOUT: Duration = Duration::from_millis(100);
 
 lazy_static! {
     pub static ref STATUS_CODE: HashMap<u16, &'static str> = HashMap::from([
@@ -194,12 +196,30 @@ impl Client {
 
     /// Set call
     pub async fn set(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.request("set", Set::new(KEY, VALUE, TTL)).await
+        self.handler_with_timeout("set", Set::new(KEY, VALUE, TTL))
+            .await
     }
 
     /// Get call
     pub async fn get(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.request("get", Get::new(KEY)).await
+        self.handler_with_timeout("get", Get::new(KEY)).await
+    }
+
+    async fn handler_with_timeout(
+        &mut self,
+        cmd_type: &str,
+        cmd: impl Command,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        match tokio::time::timeout(TIMEOUT, self.handle_request(cmd_type, cmd)).await {
+            Ok(Err(error)) => Err(error),
+            Err(_timeout_elapsed) => {
+                RESPONSE_TIME_COLLECTOR
+                    .with_label_values(&[self.cluster_name.as_str(), self.addr.as_str(), cmd_type])
+                    .observe(TIMEOUT.as_secs_f64());
+                Err(_timeout_elapsed.into())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Perform memcached request
@@ -209,7 +229,7 @@ impl Client {
     /// * `cmd_type` - the string represensatation of the command
     /// * `cmd` - the memcached command to perform
     ///
-    pub async fn request(
+    pub async fn handle_request(
         &mut self,
         cmd_type: &str,
         cmd: impl Command,
@@ -219,14 +239,12 @@ impl Client {
         match self.connection.send_request(cmd).await {
             Ok(_) => {}
             Err(issue) => {
-                return Err(format!("Failed send request to {}: {}", self.addr, issue).into())
+                return Err(format!("Failed send request to {}: {}", self.addr, issue).into());
             }
         }
 
         match self.connection.read_response().await {
-            Err(issue) => {
-                return Err(format!("Failed read response from {}: {}", self.addr, issue).into());
-            }
+            Err(issue) => Err(format!("Failed read response from {}: {}", self.addr, issue).into()),
             Ok(result) => {
                 NUMBER_OF_REQUESTS
                     .with_label_values(&[
@@ -240,9 +258,8 @@ impl Client {
                 RESPONSE_TIME_COLLECTOR
                     .with_label_values(&[self.cluster_name.as_str(), self.addr.as_str(), cmd_type])
                     .observe(start.elapsed().as_secs_f64());
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }
