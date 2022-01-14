@@ -283,7 +283,6 @@ mod tests {
     use tokio::sync::oneshot;
     use tokio::sync::oneshot::Sender;
 
-    use crate::probes::prometheus::register_custom_metrics;
     use crate::probes::prometheus::{FAILURE_PROBE, NUMBER_OF_REQUESTS};
     use crate::probes::ProbeNode;
 
@@ -308,7 +307,6 @@ mod tests {
 
     #[test]
     fn probe_node_stop() {
-        register_custom_metrics();
         NUMBER_OF_REQUESTS
             .with_label_values(&["cluster_name", "ip:0", "NoError", "get"])
             .inc();

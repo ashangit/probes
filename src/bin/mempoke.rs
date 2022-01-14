@@ -2,12 +2,11 @@ use argparse::{ArgumentParser, Store};
 use tracing::error;
 
 use probes::probes::init_probing;
-use probes::probes::prometheus::{init_prometheus_http_endpoint, register_custom_metrics};
+use probes::probes::prometheus::init_prometheus_http_endpoint;
 
 fn main() -> Result<(), i32> {
     // install global collector configured based on RUST_LOG env var.
     tracing_subscriber::fmt::init();
-    register_custom_metrics();
 
     let mut consul_fqdn = "http://localhost:8500".to_string();
     let mut http_port = 8080;
