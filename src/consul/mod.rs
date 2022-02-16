@@ -54,7 +54,7 @@ impl ConsulClient {
     /// use probes::consul::ConsulClient;
     /// let mut consul_client = ConsulClient::new("http://localhost:8500".to_string());
     /// ```
-    pub fn new(consul_fqdn: String) -> ConsulClient {
+    pub fn new(consul_fqdn: String) -> Self {
         debug!("Create consul client {}", consul_fqdn);
         let https = HttpsConnectorBuilder::new()
             .with_native_roots()
