@@ -63,14 +63,13 @@ async fn metrics_handler() -> Result<String, StatusCode> {
         //error!("could not encode prometheus metrics: {}", e.into());
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
-    let res = match String::from_utf8(buffer.clone()) {
+    let res = match String::from_utf8(buffer) {
         Ok(v) => v,
         Err(e) => {
             error!("prometheus metrics could not be from_utf8'd: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-    buffer.clear();
     Ok(res)
 }
 

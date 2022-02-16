@@ -71,14 +71,14 @@ impl Display for MemcachedError {
 impl Error for MemcachedError {}
 
 pub async fn connect(
-    cluster_name: String,
-    addr: String,
+    cluster_name: &str,
+    addr: &str,
 ) -> Result<Client, Box<dyn std::error::Error + Send + Sync>> {
-    let socket = TcpStream::connect(addr.clone()).await?;
+    let socket = TcpStream::connect(addr).await?;
     let connection = Connection::new(socket);
     Ok(Client {
-        cluster_name,
-        addr,
+        cluster_name: cluster_name.to_owned(),
+        addr: addr.to_owned(),
         connection,
     })
 }

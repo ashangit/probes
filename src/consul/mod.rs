@@ -158,7 +158,7 @@ impl ConsulClient {
     ///
     /// * ServiceNode - the definition of a node to probe with service_name, ip and port
     ///
-    fn get_service_address_port(service_name: String, node_value: &Value) -> ServiceNode {
+    fn get_service_address_port(service_name: &str, node_value: &Value) -> ServiceNode {
         let node = node_value.as_object().unwrap();
         let service_address = node
             .get("ServiceAddress")
@@ -169,7 +169,7 @@ impl ConsulClient {
         let service_port: u16 = node.get("ServicePort").unwrap().as_u64().unwrap() as u16;
 
         ServiceNode {
-            service_name,
+            service_name: service_name.to_owned(),
             ip: service_address,
             port: service_port,
         }
@@ -201,7 +201,7 @@ impl ConsulClient {
 
         let nodes = services
             .iter()
-            .map(|val| ConsulClient::get_service_address_port(service_name.clone(), val))
+            .map(|val| ConsulClient::get_service_address_port(&service_name, val))
             .collect::<Vec<ServiceNode>>();
 
         nodes
@@ -339,13 +339,13 @@ impl ConsulClient {
     pub async fn list_matching_nodes(
         &mut self,
         prev_index: i64,
-        tag: String,
+        tag: &str,
     ) -> Result<ServiceNodes, Box<dyn std::error::Error + Send + Sync>> {
         let services_uri = format!("{}/v1/catalog/services", self.fqdn);
 
         let response = self.http_call(services_uri, prev_index).await?;
 
-        let matching_services = ConsulClient::extract_matching_services(&tag, response.body_json);
+        let matching_services = ConsulClient::extract_matching_services(tag, response.body_json);
 
         let mut services_nodes: HashMap<String, ServiceNode> = HashMap::new();
         for matching_service in matching_services {
@@ -460,7 +460,7 @@ mod tests {
                 ip: "127.0.0.1".to_string(),
                 port: 1045,
             },
-            ConsulClient::get_service_address_port("service_test".to_string(), &node_value)
+            ConsulClient::get_service_address_port("service_test", &node_value)
         );
     }
 
@@ -574,7 +574,7 @@ mod tests {
     async fn list_matching_nodes() {
         let mut consul_client = init_consul_client().await;
         let res = consul_client
-            .list_matching_nodes(1, "memcached".to_string())
+            .list_matching_nodes(1, "memcached")
             .await
             .unwrap();
 

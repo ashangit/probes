@@ -47,12 +47,13 @@ impl ProbeNode {
         port: u16,
         interval_check_ms: u64,
         stop_probe_resp_rx: oneshot::Receiver<u8>,
-    ) -> ProbeNode {
+    ) -> Self {
+        let socket = format!("{}:{}", ip, port);
         ProbeNode {
             cluster_name,
-            ip: ip.clone(),
+            ip,
             port,
-            socket: format!("{}:{}", ip, port),
+            socket,
             interval_check_ms,
             stop_probe_resp_rx,
         }
@@ -85,7 +86,7 @@ impl ProbeNode {
 
     fn manage_failure(&mut self, issue: Box<dyn std::error::Error + Send + Sync>) {
         FAILURE_PROBE
-            .with_label_values(&[self.cluster_name.clone().as_str(), self.socket.as_str()])
+            .with_label_values(&[self.cluster_name.as_str(), self.socket.as_str()])
             .inc();
         error!("Failed to probe {} due to {}", self.to_string(), issue);
     }
@@ -102,15 +103,11 @@ impl ProbeNode {
     ///
     async fn start(&mut self) {
         loop {
-            match memcached::connect(self.cluster_name.clone(), self.socket.clone()).await {
+            match memcached::connect(&self.cluster_name, &self.socket).await {
                 Ok(mut c_memcache) => loop {
                     match self.stop_probe_resp_rx.try_recv() {
                         Ok(_) | Err(TryRecvError::Closed) => {
-                            info!(
-                                "Stop to probe node: {}:{}",
-                                self.cluster_name.clone(),
-                                self.socket.clone()
-                            );
+                            info!("Stop to probe node: {}:{}", self.cluster_name, self.socket);
                             return self.stop();
                         }
                         Err(TryRecvError::Empty) => {
@@ -128,11 +125,7 @@ impl ProbeNode {
             }
             match self.stop_probe_resp_rx.try_recv() {
                 Ok(_) | Err(TryRecvError::Closed) => {
-                    info!(
-                        "Stop to probe node: {}:{}",
-                        self.cluster_name.clone(),
-                        self.socket.clone()
-                    );
+                    info!("Stop to probe node: {}:{}", self.cluster_name, self.socket);
                     return self.stop();
                 }
                 Err(TryRecvError::Empty) => {
@@ -188,7 +181,7 @@ impl ProbeServices {
         let mut probe_nodes_to_stop: Vec<String> = Vec::new();
         for probe_node_key in self.probe_nodes.keys() {
             if !discovered_nodes.contains_key(probe_node_key) {
-                probe_nodes_to_stop.push(probe_node_key.clone());
+                probe_nodes_to_stop.push(probe_node_key.to_string());
             }
         }
 
@@ -209,8 +202,8 @@ impl ProbeServices {
         stop_probe_resp_rx: oneshot::Receiver<u8>,
     ) {
         ProbeNode::new(
-            service_node.service_name.clone(),
-            service_node.ip.clone(),
+            service_node.service_name,
+            service_node.ip,
             service_node.port,
             interval_check_ms,
             stop_probe_resp_rx,
@@ -228,13 +221,14 @@ impl ProbeServices {
     ///
     fn start_nodes_probe(&mut self, discovered_nodes: &HashMap<String, ServiceNode>) {
         for discovered_node in discovered_nodes.iter() {
-            let key_node = discovered_node.0.clone();
+            let key_node = discovered_node.0.as_str();
             let service_node = discovered_node.1;
-            if !self.probe_nodes.contains_key(key_node.as_str()) {
+            if !self.probe_nodes.contains_key(key_node) {
                 info!("Start to probe node: {}", key_node);
 
                 let (stop_probe_resp_tx, stop_probe_resp_rx) = oneshot::channel();
-                self.probe_nodes.insert(key_node, stop_probe_resp_tx);
+                self.probe_nodes
+                    .insert(key_node.to_string(), stop_probe_resp_tx);
 
                 tokio::spawn(ProbeServices::start_node_probe(
                     (*service_node).clone(),
@@ -258,7 +252,7 @@ impl ProbeServices {
 
             match self
                 .consul_client
-                .list_matching_nodes(index, self.tag.clone())
+                .list_matching_nodes(index, &self.tag)
                 .await
             {
                 Ok(discovered_nodes) => {
