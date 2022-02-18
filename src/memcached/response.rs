@@ -24,12 +24,7 @@ impl Response {
     ///   or an Other error from response header check
     ///
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, MemcachedError> {
-        let total_len = match ResponseHeader::check(src) {
-            Err(issue) => {
-                return Err(issue);
-            }
-            Ok(_total_len) => _total_len,
-        };
+        let total_len = ResponseHeader::check(src)?;
 
         // Check remaining
         if src.remaining() < total_len {

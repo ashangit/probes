@@ -124,13 +124,7 @@ impl ConsulClient {
     ///
     fn extract_matching_services(tag: &str, body_json: Value) -> Vec<String> {
         let empty = Map::new();
-        let services = match body_json.as_object() {
-            Some(x) => x,
-            None => {
-                warn!("Empty list of services on the consul catalog");
-                &empty
-            }
-        };
+        let services = body_json.as_object().unwrap_or(&empty);
 
         let matching_services = services
             .keys()
