@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use bytes::{Buf, Bytes};
 
-use crate::memcached::{MemcachedError, MemcachedErrorKind};
+use crate::memcached::MemcachedError;
 
 const HEADER_SIZE: u8 = 24;
 
@@ -124,12 +124,12 @@ impl ResponseHeader {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, MemcachedError> {
         // Check enough bytes to read for a response header
         if src.remaining() < HEADER_SIZE as usize {
-            return Err(MemcachedErrorKind::Incomplete.into());
+            return Err(MemcachedError::Incomplete);
         }
 
         // CHeck magic field is the one forResponse Packet
         if src.copy_to_bytes(1) != Bytes::from_static(b"\x81") {
-            return Err(MemcachedErrorKind::Other.into());
+            return Err(MemcachedError::Other);
         }
 
         // Read body length field to compute total len response
@@ -152,7 +152,7 @@ mod tests {
 
     use crate::memcached::command::SET_OPCODE;
     use crate::memcached::header::{RequestHeader, ResponseHeader};
-    use crate::memcached::{MemcachedError, MemcachedErrorKind};
+    use crate::memcached::MemcachedError;
 
     #[test]
     fn parse_response_header() {
@@ -190,10 +190,7 @@ mod tests {
         let mut cursor = Cursor::new(decoded.as_slice());
         let res = ResponseHeader::check(&mut cursor);
         assert!(res.is_err());
-        assert_eq!(
-            res.err().unwrap(),
-            MemcachedError(MemcachedErrorKind::Other)
-        );
+        assert_eq!(res.err().unwrap(), MemcachedError::Other);
     }
 
     #[test]
@@ -203,10 +200,7 @@ mod tests {
         let mut cursor = Cursor::new(decoded.as_slice());
         let res = ResponseHeader::check(&mut cursor);
         assert!(res.is_err());
-        assert_eq!(
-            res.err().unwrap(),
-            MemcachedError(MemcachedErrorKind::Incomplete)
-        );
+        assert_eq!(res.err().unwrap(), MemcachedError::Incomplete);
     }
 
     #[test]

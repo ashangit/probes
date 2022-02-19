@@ -3,7 +3,7 @@ use std::io::Cursor;
 use bytes::Buf;
 
 use crate::memcached::header::ResponseHeader;
-use crate::memcached::{MemcachedError, MemcachedErrorKind};
+use crate::memcached::MemcachedError;
 
 pub struct Response {
     pub header: ResponseHeader,
@@ -28,7 +28,7 @@ impl Response {
 
         // Check remaining
         if src.remaining() < total_len {
-            return Err(MemcachedErrorKind::Incomplete.into());
+            return Err(MemcachedError::Incomplete);
         }
 
         Ok(total_len)
@@ -54,7 +54,7 @@ mod tests {
     use std::io::Cursor;
 
     use crate::memcached::response::Response;
-    use crate::memcached::{MemcachedError, MemcachedErrorKind};
+    use crate::memcached::MemcachedError;
 
     fn check(input: &str) -> Result<usize, MemcachedError> {
         let decoded = hex::decode(input).expect("Decoding failed");
@@ -73,10 +73,7 @@ mod tests {
     fn check_response_header_incomplete() {
         let res = check("8100000004000000000000100000000000000000000000010000000030");
         assert!(res.is_err());
-        assert_eq!(
-            res.err().unwrap(),
-            MemcachedError(MemcachedErrorKind::Incomplete)
-        );
+        assert_eq!(res.err().unwrap(), MemcachedError::Incomplete);
     }
 
     #[test]

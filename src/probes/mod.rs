@@ -11,7 +11,7 @@ use tracing::{debug, error, info};
 
 use crate::consul::{ConsulClient, ServiceNode};
 use crate::memcached;
-use crate::memcached::STATUS_CODE;
+use crate::memcached::{MemcachedClientError, STATUS_CODE};
 use crate::probes::prometheus::{
     FAILURE_PROBE, FAILURE_SERVICES_DISCOVERY, NUMBER_OF_REQUESTS, RESPONSE_TIME_COLLECTOR,
 };
@@ -84,7 +84,7 @@ impl ProbeNode {
         }
     }
 
-    fn manage_failure(&mut self, issue: Box<dyn std::error::Error + Send + Sync>) {
+    fn manage_failure(&mut self, issue: MemcachedClientError) {
         FAILURE_PROBE
             .with_label_values(&[self.cluster_name.as_str(), self.socket.as_str()])
             .inc();
@@ -274,14 +274,15 @@ impl ProbeServices {
 
 #[cfg(test)]
 mod tests {
+    use crate::memcached::MemcachedClientError;
     use tokio::sync::oneshot;
     use tokio::sync::oneshot::Sender;
 
     use crate::probes::prometheus::{FAILURE_PROBE, NUMBER_OF_REQUESTS};
     use crate::probes::ProbeNode;
 
-    fn return_error() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        Err("issue".into())
+    fn return_error() -> Result<(), MemcachedClientError> {
+        Err(MemcachedClientError::EmptyOrIncompleteResponse)
     }
 
     fn get_probe() -> (ProbeNode, Sender<u8>) {

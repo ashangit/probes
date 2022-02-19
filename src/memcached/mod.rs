@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
+use std::io;
 use std::io::Cursor;
 use std::time::{Duration, Instant};
 
@@ -9,6 +9,7 @@ use bytes::{Buf, BytesMut};
 use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+use tokio::time::error::Elapsed;
 
 use crate::memcached::command::{Command, Get, Set};
 use crate::memcached::response::Response;
@@ -39,41 +40,68 @@ lazy_static! {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct MemcachedError(MemcachedErrorKind);
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum MemcachedErrorKind {
+pub enum MemcachedError {
     Incomplete,
     Other,
 }
 
-impl MemcachedError {
-    fn s(&self) -> &str {
-        match self.0 {
-            MemcachedErrorKind::Incomplete => "incomplete",
-            MemcachedErrorKind::Other => "other issue",
-        }
-    }
-}
-
-impl From<MemcachedErrorKind> for MemcachedError {
-    fn from(src: MemcachedErrorKind) -> MemcachedError {
-        MemcachedError(src)
-    }
-}
-
 impl Display for MemcachedError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.s().fmt(f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MemcachedError::Incomplete => write!(f, "incomplete."),
+            MemcachedError::Other => write!(f, "other issue."),
+        }
     }
 }
 
 impl Error for MemcachedError {}
 
-pub async fn connect(
-    cluster_name: &str,
-    addr: &str,
-) -> Result<Client, Box<dyn std::error::Error + Send + Sync>> {
+#[derive(Debug)]
+pub enum MemcachedClientError {
+    EmptyOrIncompleteResponse,
+    Io(io::Error),
+    ConnectionReset,
+    MemcachedError(MemcachedError),
+    Timeout(Elapsed),
+}
+
+impl Display for MemcachedClientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MemcachedClientError::EmptyOrIncompleteResponse => {
+                write!(f, "empty or incomplete response.")
+            }
+            MemcachedClientError::Io(ref io) => write!(f, "I/O error: {}", io),
+            MemcachedClientError::Timeout(ref timeout) => write!(f, "Timeout error: {}", timeout),
+            MemcachedClientError::ConnectionReset => write!(f, "Connection reset by peer."),
+            MemcachedClientError::MemcachedError(ref memcached_error) => {
+                write!(f, "MemcachedError error: {}", memcached_error)
+            }
+        }
+    }
+}
+
+impl From<io::Error> for MemcachedClientError {
+    fn from(other: io::Error) -> Self {
+        MemcachedClientError::Io(other)
+    }
+}
+
+impl From<MemcachedError> for MemcachedClientError {
+    fn from(other: MemcachedError) -> Self {
+        MemcachedClientError::MemcachedError(other)
+    }
+}
+
+impl From<Elapsed> for MemcachedClientError {
+    fn from(other: Elapsed) -> Self {
+        MemcachedClientError::Timeout(other)
+    }
+}
+
+impl Error for MemcachedClientError {}
+
+pub async fn connect(cluster_name: &str, addr: &str) -> Result<Client, MemcachedClientError> {
     let socket = TcpStream::connect(addr).await?;
     let connection = Connection::new(socket);
     Ok(Client {
@@ -115,7 +143,7 @@ impl Connection {
     pub async fn send_request(
         &mut self,
         mut cmd: impl Command,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), MemcachedClientError> {
         self.stream.write_all(cmd.as_bytes().as_slice()).await?;
         self.stream.flush().await?;
         Ok(())
@@ -131,22 +159,20 @@ impl Connection {
     ///
     /// * Response
     ///
-    pub async fn read_response(
-        &mut self,
-    ) -> Result<Response, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn read_response(&mut self) -> Result<Response, MemcachedClientError> {
         loop {
             match self.parse_response() {
                 Ok(Some(response)) => return Ok(response),
                 Ok(None) => {
                     if 0 == self.stream.read_buf(&mut self.buffer).await? {
                         return if self.buffer.is_empty() {
-                            Err("empty or incomplete response".into())
+                            Err(MemcachedClientError::EmptyOrIncompleteResponse)
                         } else {
-                            Err("connection reset by peer".into())
+                            Err(MemcachedClientError::ConnectionReset)
                         };
                     }
                 }
-                Err(issue) => return Err(issue.into()),
+                Err(issue) => return Err(issue),
             };
         }
     }
@@ -162,7 +188,7 @@ impl Connection {
     ///   or None is there are not enough bytes
     ///   or an Other error from response header check
     ///
-    fn parse_response(&mut self) -> Result<Option<Response>, MemcachedError> {
+    fn parse_response(&mut self) -> Result<Option<Response>, MemcachedClientError> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Response::check(&mut buf) {
@@ -173,8 +199,8 @@ impl Connection {
 
                 Ok(Some(response))
             }
-            Err(MemcachedError(MemcachedErrorKind::Incomplete)) => Ok(None),
-            Err(issue) => Err(issue),
+            Err(MemcachedError::Incomplete) => Ok(None),
+            Err(issue) => Err(MemcachedClientError::from(issue)),
         }
     }
 }
@@ -189,19 +215,19 @@ impl Client {
     /// Probe action
     /// * issue one set
     /// * issue one get
-    pub async fn probe(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn probe(&mut self) -> Result<(), MemcachedClientError> {
         self.set().await?;
         self.get().await
     }
 
     /// Set call
-    pub async fn set(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn set(&mut self) -> Result<(), MemcachedClientError> {
         self.handler_with_timeout("set", Set::new(KEY, VALUE, TTL))
             .await
     }
 
     /// Get call
-    pub async fn get(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get(&mut self) -> Result<(), MemcachedClientError> {
         self.handler_with_timeout("get", Get::new(KEY)).await
     }
 
@@ -209,14 +235,14 @@ impl Client {
         &mut self,
         cmd_type: &str,
         cmd: impl Command,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), MemcachedClientError> {
         match tokio::time::timeout(TIMEOUT, self.handle_request(cmd_type, cmd)).await {
             Ok(Err(error)) => Err(error),
             Err(_timeout_elapsed) => {
                 RESPONSE_TIME_COLLECTOR
                     .with_label_values(&[self.cluster_name.as_str(), self.addr.as_str(), cmd_type])
                     .observe(TIMEOUT.as_secs_f64());
-                Err(_timeout_elapsed.into())
+                Err(MemcachedClientError::from(_timeout_elapsed))
             }
             _ => Ok(()),
         }
@@ -233,18 +259,13 @@ impl Client {
         &mut self,
         cmd_type: &str,
         cmd: impl Command,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), MemcachedClientError> {
         let start = Instant::now();
 
-        match self.connection.send_request(cmd).await {
-            Ok(_) => {}
-            Err(issue) => {
-                return Err(format!("Failed send request to {}: {}", self.addr, issue).into());
-            }
-        }
+        self.connection.send_request(cmd).await?;
 
         match self.connection.read_response().await {
-            Err(issue) => Err(format!("Failed read response from {}: {}", self.addr, issue).into()),
+            Err(issue) => Err(issue),
             Ok(result) => {
                 NUMBER_OF_REQUESTS
                     .with_label_values(&[
