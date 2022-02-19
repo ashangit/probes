@@ -130,8 +130,8 @@ impl Connection {
     pub async fn read_response(&mut self) -> Result<Response, MemcachedClientError> {
         loop {
             match self.parse_response() {
-                Ok(Some(response)) => return Ok(response),
-                Ok(None) => {
+                Ok(response) => return Ok(response),
+                Err(MemcachedError::Incomplete) => {
                     if 0 == self.stream.read_buf(&mut self.buffer).await? {
                         return if self.buffer.is_empty() {
                             Err(MemcachedClientError::EmptyOrIncompleteResponse)
@@ -140,7 +140,7 @@ impl Connection {
                         };
                     }
                 }
-                Err(issue) => return Err(issue),
+                Err(issue) => return Err(MemcachedClientError::from(issue)),
             };
         }
     }
@@ -156,19 +156,16 @@ impl Connection {
     ///   or None is there are not enough bytes
     ///   or an Other error from response header check
     ///
-    fn parse_response(&mut self) -> Result<Option<Response>, MemcachedClientError> {
+    fn parse_response(&mut self) -> Result<Response, MemcachedError> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Response::check(&mut buf) {
             Ok(len) => {
                 let response = Response::parse(&mut buf);
-
                 self.buffer.advance(len);
-
-                Ok(Some(response))
+                Ok(response)
             }
-            Err(MemcachedError::Incomplete) => Ok(None),
-            Err(issue) => Err(MemcachedClientError::from(issue)),
+            Err(issue) => Err(issue),
         }
     }
 }
