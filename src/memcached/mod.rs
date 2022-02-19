@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Cursor;
 use std::time::{Duration, Instant};
 
 use bytes::{Buf, BytesMut};
 use lazy_static::lazy_static;
+use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 use tokio::time::error::Elapsed;
@@ -39,67 +38,36 @@ lazy_static! {
     ]);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq)]
 pub enum MemcachedError {
+    #[error("Incomplete.")]
     Incomplete,
+    #[error("Other issue.")]
     Other,
 }
 
-impl Display for MemcachedError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            MemcachedError::Incomplete => write!(f, "incomplete."),
-            MemcachedError::Other => write!(f, "other issue."),
-        }
-    }
-}
-
-impl Error for MemcachedError {}
-
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum MemcachedClientError {
+    #[error("Empty or incomplete response.")]
     EmptyOrIncompleteResponse,
-    Io(io::Error),
+    #[error("I/O error: {source}")]
+    Io {
+        #[from]
+        source: io::Error,
+    },
+    #[error("Connection reset by peer.")]
     ConnectionReset,
-    MemcachedError(MemcachedError),
-    Timeout(Elapsed),
+    #[error("MemcachedError error: {source}")]
+    MemcachedError {
+        #[from]
+        source: MemcachedError,
+    },
+    #[error("Timeout error: {source}.")]
+    Timeout {
+        #[from]
+        source: Elapsed,
+    },
 }
-
-impl Display for MemcachedClientError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            MemcachedClientError::EmptyOrIncompleteResponse => {
-                write!(f, "empty or incomplete response.")
-            }
-            MemcachedClientError::Io(ref io) => write!(f, "I/O error: {}", io),
-            MemcachedClientError::Timeout(ref timeout) => write!(f, "Timeout error: {}", timeout),
-            MemcachedClientError::ConnectionReset => write!(f, "Connection reset by peer."),
-            MemcachedClientError::MemcachedError(ref memcached_error) => {
-                write!(f, "MemcachedError error: {}", memcached_error)
-            }
-        }
-    }
-}
-
-impl From<io::Error> for MemcachedClientError {
-    fn from(other: io::Error) -> Self {
-        MemcachedClientError::Io(other)
-    }
-}
-
-impl From<MemcachedError> for MemcachedClientError {
-    fn from(other: MemcachedError) -> Self {
-        MemcachedClientError::MemcachedError(other)
-    }
-}
-
-impl From<Elapsed> for MemcachedClientError {
-    fn from(other: Elapsed) -> Self {
-        MemcachedClientError::Timeout(other)
-    }
-}
-
-impl Error for MemcachedClientError {}
 
 pub async fn connect(cluster_name: &str, addr: &str) -> Result<Client, MemcachedClientError> {
     let socket = TcpStream::connect(addr).await?;
