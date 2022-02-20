@@ -117,7 +117,9 @@ impl ProbeNode {
                             }
                         }
                     }
-                    sleep(Duration::from_millis(self.interval_check_ms)).await;
+                    if self.interval_check_ms > 0 {
+                        sleep(Duration::from_millis(self.interval_check_ms)).await;
+                    }
                 },
                 Err(issue) => {
                     self.manage_failure(issue);
@@ -274,10 +276,10 @@ impl ProbeServices {
 
 #[cfg(test)]
 mod tests {
-    use crate::memcached::MemcachedClientError;
     use tokio::sync::oneshot;
     use tokio::sync::oneshot::Sender;
 
+    use crate::memcached::MemcachedClientError;
     use crate::probes::prometheus::{FAILURE_PROBE, NUMBER_OF_REQUESTS};
     use crate::probes::ProbeNode;
 

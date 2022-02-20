@@ -7,8 +7,8 @@ docker rm dev-memcached --force
 docker rm dev-memcached2 --force
 docker rm dev-memcached3 --force
 docker rm dev-memcached4 --force
-#docker rm dev-grafana --force
-#docker rm dev-prometheus --force
+docker rm dev-grafana --force
+docker rm dev-prometheus --force
 docker run -d --rm --pull always --name=dev-consul --network host -v ${SCRIPT_DIR}/conf/consul:/consul/config consul
 docker run -d --rm --pull always --name=dev-memcached --network host memcached -m 128
 docker run -d --rm --pull always --name=dev-memcached2 --network host memcached -m 128 -p 11212

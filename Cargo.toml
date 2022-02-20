@@ -8,8 +8,6 @@ edition = "2021"
 name = "mempoke"
 path = "src/bin/mempoke.rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 # Async scheduler
 tokio = { version = "1", features = ["full", "tracing"] }
