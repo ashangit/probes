@@ -75,7 +75,7 @@ impl Command for Set {
     fn as_bytes(&mut self) -> Vec<u8> {
         let mut req: Vec<u8> = Vec::new();
         req.extend(self.header.as_bytes());
-        req.extend(&self.extra_field);
+        req.extend(self.extra_field);
         req.extend(self.key);
         req.extend(self.value);
         req
