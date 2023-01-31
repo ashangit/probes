@@ -48,7 +48,7 @@ impl ProbeNode {
         interval_check_ms: u64,
         stop_probe_resp_rx: oneshot::Receiver<u8>,
     ) -> Self {
-        let socket = format!("{}:{}", ip, port);
+        let socket = format!("{ip}:{port}");
         ProbeNode {
             cluster_name,
             ip,

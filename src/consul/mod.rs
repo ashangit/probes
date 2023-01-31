@@ -248,7 +248,7 @@ impl ConsulClient {
         uri_str: String,
         prev_index: i64,
     ) -> Result<HttpCall, Box<dyn std::error::Error + Send + Sync>> {
-        let query_uri = format!("{}?index={}&wait=5m", uri_str, prev_index);
+        let query_uri = format!("{uri_str}?index={prev_index}&wait=5m");
         debug!("Query consul: {}", query_uri);
         let uri = match query_uri.as_str().parse::<Uri>() {
             Err(issue) => {
